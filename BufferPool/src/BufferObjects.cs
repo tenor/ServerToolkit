@@ -23,13 +23,22 @@ namespace ServerToolkit.BufferManagement
 {
     public class Buffer : IBuffer
     {
-        protected bool disposed;
+        protected bool disposed = false;
         internal IMemoryBlock memoryBlock;
+        byte[] slabArray;
 
         internal Buffer(IMemoryBlock AllocatedMemoryBlock)
         {
             memoryBlock = AllocatedMemoryBlock;
-            disposed = false;
+            slabArray = null;
+        }
+
+
+        //Used for Creating an empty (zero-length) buffer
+        internal Buffer(byte[] SlabArray)
+        {
+            memoryBlock = null;
+            slabArray = SlabArray;
         }
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
@@ -37,9 +46,9 @@ namespace ServerToolkit.BufferManagement
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
-            if (memoryBlock.Length <= int.MaxValue)
+            if (this.Length <= int.MaxValue)
             {
-                return GetArraySegment(0, (int)memoryBlock.Length);
+                return GetArraySegment(0, (int)this.Length);
             }
             else
             {
@@ -57,16 +66,23 @@ namespace ServerToolkit.BufferManagement
         public ArraySegment<byte> GetArraySegment(int Offset, int Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > memoryBlock.Length)
+            if (Length > this.Length)
             {
                 throw new ArgumentOutOfRangeException("Length");
             }
-            if (Offset > memoryBlock.Length)
+            if (Offset > this.Length)
             {
                 throw new ArgumentOutOfRangeException("Offset");
             }
 
-            return new ArraySegment<byte>(memoryBlock.Slab.Array, Offset, Length);
+            if (this.Length == 0)
+            {
+                return new ArraySegment<byte>(slabArray, 0, 0);
+            }
+            else
+            {
+                return new ArraySegment<byte>(memoryBlock.Slab.Array, Offset, Length);
+            }
         }
 
 
@@ -74,13 +90,14 @@ namespace ServerToolkit.BufferManagement
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
-            CopyTo(DestinationArray, 0, memoryBlock.Length);
+            CopyTo(DestinationArray, 0, this.Length);
         }
 
         public void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > memoryBlock.Length) throw new ArgumentOutOfRangeException("Length"); 
+            if (Length > this.Length) throw new ArgumentOutOfRangeException("Length");
+            if (this.Length == 0) return;
 
             Array.Copy(memoryBlock.Slab.Array, 0, DestinationArray, DestinationIndex, Length);
         }
@@ -95,7 +112,8 @@ namespace ServerToolkit.BufferManagement
         public void CopyFrom(byte[] SourceArray, long SourceIndex, long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > (SourceIndex + memoryBlock.Length)) throw new ArgumentOutOfRangeException("Length");
+            if (Length > (SourceIndex + this.Length)) throw new ArgumentOutOfRangeException("Length");
+            if (this.Length == 0) return;
 
             Array.Copy(SourceArray, SourceIndex, memoryBlock.Slab.Array, 0, Length);
         }
@@ -113,7 +131,10 @@ namespace ServerToolkit.BufferManagement
 
                 try
                 {
-                    memoryBlock.Slab.Free(memoryBlock);
+                    if (memoryBlock != null)
+                    {
+                        memoryBlock.Slab.Free(memoryBlock);
+                    }
                 }
                 catch
                 {
@@ -128,7 +149,7 @@ namespace ServerToolkit.BufferManagement
 
         public long Length
         {
-            get { return memoryBlock.Length; }
+            get { return memoryBlock == null ? 0 : memoryBlock.Length; }
         }
 
 
@@ -144,6 +165,7 @@ namespace ServerToolkit.BufferManagement
         private object sync = new object();
         private bool disposed;
         private List<IMemorySlab> slabs = new List<IMemorySlab>();
+        private readonly IMemorySlab firstSlab;
 
         public BufferPool(long SlabSize, int InitialSlabs, int SubsequentSlabs)
         {
@@ -162,6 +184,8 @@ namespace ServerToolkit.BufferManagement
                     {
                         slabs.Add(new MemorySlab(slabSize, this));
                     }
+
+                    firstSlab = slabs[0];
                 }
             }
         }
@@ -170,11 +194,17 @@ namespace ServerToolkit.BufferManagement
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
+            if (Size == 0) return new Buffer(firstSlab.Array); //Return an empty buffer
+
+            //TODO: Add an optimization that would check if there is only one slab and create the array below from firstSlab
+            //      to avoid the lock statement below
+
             IMemorySlab[] slabArr;
             lock (sync)
             {
                 slabArr = slabs.ToArray();
             }
+
 
             IMemoryBlock allocatedBlock;
             for (int i = 0; i < slabArr.Length; i++)

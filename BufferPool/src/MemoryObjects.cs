@@ -28,7 +28,7 @@ namespace ServerToolkit.BufferManagement
         readonly long startLoc, endLoc, length;
         readonly IMemorySlab owner;
 
-        internal MemoryBlock(long StartLocation, long Length, IMemorySlab Owner)
+        internal MemoryBlock(long StartLocation, long Length, IMemorySlab Slab)
         {
             if (StartLocation < 0)
             {
@@ -36,7 +36,7 @@ namespace ServerToolkit.BufferManagement
             }
             startLoc = StartLocation;
 
-            if (length <= 0)
+            if (Length <= 0)
             {
                 throw new ArgumentOutOfRangeException("Length", "Length must be greater than 0");
             }
@@ -47,8 +47,8 @@ namespace ServerToolkit.BufferManagement
             }
             endLoc = StartLocation + Length - 1;
             length = Length;
-            if (Owner == null) throw new ArgumentNullException("Owner");
-            this.owner = Owner;
+            if (Slab == null) throw new ArgumentNullException("Slab");
+            this.owner = Slab;
         }
 
 
@@ -97,7 +97,7 @@ namespace ServerToolkit.BufferManagement
         internal MemorySlab(long TotalLength, BufferPool Pool)
         {
 
-            if (System.Runtime.InteropServices.Marshal.SizeOf(typeof(System.IntPtr)) > 32)
+            if (System.IntPtr.Size > 4)
             {
                 is64BitMachine = true;
             }
@@ -115,7 +115,6 @@ namespace ServerToolkit.BufferManagement
                     this.length = TotalLength;
                     this.pool = Pool;
                     array = new byte[TotalLength];
-
                 }
             }
         }
@@ -174,19 +173,26 @@ namespace ServerToolkit.BufferManagement
                 if (GetLargest() < Size) return false;
 
                 //search freeBlocksList looking for the smallest available free block
-                long[] indices = new long[freeBlocksList.Count];
-                freeBlocksList.Keys.CopyTo(indices, 0);
-                int index = System.Array.BinarySearch<long>(indices, Size);
+                long[] keys = new long[freeBlocksList.Count];
+                freeBlocksList.Keys.CopyTo(keys, 0);
+                int index = System.Array.BinarySearch<long>(keys, Size);
                 if (index < 0)
                 {
                     index = ~index;
-                    if (index >= indices.LongLength)
+                    if (index >= keys.LongLength)
                     {
                         return false;
                     }
                 }
 
-                IMemoryBlock foundBlock = freeBlocksList[index][0];
+                //Grab the first memoryblock in the freeBlockList innerSortedDictionary
+                //There is guanranteed to be an innerSortedDictionary with at least 1 key=value pair
+                IMemoryBlock foundBlock = null;
+                foreach (KeyValuePair<long,IMemoryBlock> kvPair in freeBlocksList[keys[index]])
+                {
+                    foundBlock = kvPair.Value;
+                    break;
+                }
 
                 //Remove existing free block
                 RemoveFreeBlock(foundBlock);
@@ -201,13 +207,14 @@ namespace ServerToolkit.BufferManagement
                 {
                     //FoundBlock is larger than requested block size
 
-                    long newFreeStartLocation = foundBlock.EndLocation + 1;
+                    AllocatedBlock = new MemoryBlock(foundBlock.StartLocation, Size, this);
+
+                    long newFreeStartLocation = AllocatedBlock.EndLocation + 1;
                     long newFreeSize = foundBlock.Length - Size;
 
                     //add new Freeblock with smaller space
                     AddFreeBlock(newFreeStartLocation, newFreeSize);
 
-                    AllocatedBlock = new MemoryBlock(foundBlock.StartLocation, Size, this);
 
                 }
 
@@ -223,6 +230,7 @@ namespace ServerToolkit.BufferManagement
             if (!freeBlocksList.TryGetValue(StartLocation, out innerList))
             {
                 innerList = new SortedDictionary<long, IMemoryBlock>();
+                freeBlocksList.Add(Length, innerList);
             }
 
             MemoryBlock newFreeBlock = new MemoryBlock(StartLocation, Length, this);
@@ -267,24 +275,27 @@ namespace ServerToolkit.BufferManagement
         {
             lock (sync)
             {
-                //Verify that input AllocatedBlock is in this Slab
+
+                //TODO: Roll commected out code into a test and have it check all startlocs and endlocs to make sure there was no overlap
+                //Verify that Allocated block was truly allocated
+                /*
                 IMemoryBlock foundBlock;
-                if ((!dictStartLoc.TryGetValue(AllocatedBlock.StartLocation, out foundBlock)) || foundBlock.Length != AllocatedBlock.Length)
+                if ((dictStartLoc.TryGetValue(AllocatedBlock.StartLocation, out foundBlock)) || foundBlock.Length != AllocatedBlock.Length)
                 {
                     throw new InvalidOperationException("AllocatedBlock was not found in MemorySlab");
                 }
-
+                 */
 
                 long? newFreeStartLocation = null;
                 long newFreeSize = 0;
 
-                if (foundBlock.StartLocation > 0)
+                if (AllocatedBlock.StartLocation > 0)
                 {
 
                     //Check if block before this one is free
 
                     IMemoryBlock blockBefore;
-                    if (dictEndLoc.TryGetValue(foundBlock.StartLocation - 1, out blockBefore))
+                    if (dictEndLoc.TryGetValue(AllocatedBlock.StartLocation - 1, out blockBefore))
                     {
                         //Yup, so delete it
                         newFreeStartLocation = blockBefore.StartLocation;
@@ -298,11 +309,11 @@ namespace ServerToolkit.BufferManagement
                 if (!newFreeStartLocation.HasValue) newFreeStartLocation = AllocatedBlock.StartLocation;
                 newFreeSize += AllocatedBlock.Length;
 
-                if (foundBlock.EndLocation + 1 < TotalLength)
+                if (AllocatedBlock.EndLocation + 1 < TotalLength)
                 {
                     // Check if block after this one is free
                     IMemoryBlock blockAfter;
-                    if (dictStartLoc.TryGetValue(foundBlock.EndLocation + 1, out blockAfter))
+                    if (dictStartLoc.TryGetValue(AllocatedBlock.EndLocation + 1, out blockAfter))
                     {
                         //Yup, delete it
                         newFreeSize += blockAfter.Length;
@@ -318,7 +329,10 @@ namespace ServerToolkit.BufferManagement
             if (GetLargest() == TotalLength)
             {
                 //This slab is empty. prod pool to do some cleanup
-                pool.TryFreeSlab();
+                if (pool != null)
+                {
+                    pool.TryFreeSlab();
+                }
             }
 
         }

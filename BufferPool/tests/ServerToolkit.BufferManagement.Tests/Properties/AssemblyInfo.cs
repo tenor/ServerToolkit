@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("ServerToolkit.BufferManagement")]
-[assembly: AssemblyDescription("Provides buffer management for asynchronous socket operations")]
+[assembly: AssemblyTitle("ServerToolkit.BufferManagement.Tests")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("ServerToolkit.BufferManagement")]
-[assembly: AssemblyCopyright("Copyright © Sunny Ahuwanya 2011")]
+[assembly: AssemblyCompany("Microsoft")]
+[assembly: AssemblyProduct("ServerToolkit.BufferManagement.Tests")]
+[assembly: AssemblyCopyright("Copyright © Microsoft 2011")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("9656874b-c191-43a5-b321-3728e4c3539f")]
+[assembly: Guid("d21973df-9b2f-4081-8b12-6109a578979f")]
 
 // Version information for an assembly consists of the following four values:
 //
@@ -31,8 +31,5 @@ using System.Runtime.InteropServices;
 //
 // You can specify all the values or you can default the Build and Revision Numbers 
 // by using the '*' as shown below:
-// [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("0.8.0.2")]
-[assembly: AssemblyFileVersion("0.8.0.2")]
-
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ServerToolkit.BufferManagement.Tests")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
