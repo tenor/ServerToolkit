@@ -64,38 +64,80 @@ namespace ServerToolkit.BufferManagement.Tests
         #endregion
 
 
-        internal long totalLen = 200000;
+        internal long totalSize = 200000;
 
         internal virtual IMemorySlab CreateIMemorySlab()
         {
 
-            IMemorySlab target = new MemorySlab(totalLen, null);
+            IMemorySlab target = new MemorySlab(totalSize, null);
             return target;
         }
+
+        internal virtual IMemorySlab CreateInvalidMemorySlab1()
+        {
+            IMemorySlab target = new MemorySlab(-1, null);
+            return target;
+        }
+
+        internal virtual IMemorySlab CreateInvalidMemorySlab2()
+        {
+            IMemorySlab target = new MemorySlab(0, null);
+            return target;
+        }
+
 
         /// <summary>
         ///A test for Free
         ///</summary>
         [TestMethod()]
+        [Description("Free method works as expected in different scenarios")]
         public void FreeTest()
         {
-            //TODO: Figure out a LIGHTWEIGHT way to make sure that once a memoryblock is freed. 
-                    //a). It cannot be reused
-                    //b). It cannot be freed again
-                    //c). Mechanism should be lightweight check but throw exceptions since buffer handles this developer-side
+            IMemorySlab target = CreateIMemorySlab();
+            IMemoryBlock block1, block2, block3, block4, block5, block6;
+            target.TryAllocate(10,out block1);
+            target.TryAllocate(10, out block2);
+            target.TryAllocate(10, out block3);
+            target.TryAllocate(10, out block4);
+            target.TryAllocate(10, out block5);
+            target.TryAllocate(target.LargestFreeBlockSize, out block6); 
+            //entire slab is now used up
 
-            //TODO: Create tests that scan all allocated and free areas for overlap during free.
-
-            IMemorySlab target = CreateIMemorySlab(); // TODO: Initialize to an appropriate value
-            IMemoryBlock AllocatedBlock = null; // TODO: Initialize to an appropriate value
-            target.Free(AllocatedBlock);
-            Assert.Inconclusive("A method that does not return a value cannot be verified.");
+            //Free block1
+            target.Free(block1);
+            //reassign block1 to be 4 bytes;
+            target.TryAllocate(4, out block1);
+            //Free space should be 6 bytes now;
+            Assert.AreEqual<long>(6, target.LargestFreeBlockSize);
+            //Free Block2
+            target.Free(block2);
+            //Free space should now be 16 bytes;
+            Assert.AreEqual<long>(16, target.LargestFreeBlockSize);
+            //Free Block5
+            target.Free(block5);
+            //Free Block4
+            target.Free(block4);
+            //Largest free space should now be 20 bytes;
+            Assert.AreEqual<long>(20, target.LargestFreeBlockSize);
+            //Free Block3
+            target.Free(block3);
+            //Largest free space should now be 20 + 10 + 16 = 46 bytes
+            Assert.AreEqual<long>(46, target.LargestFreeBlockSize);
+            //Free Block6
+            target.Free(block6);
+            //Largest free block should be slab size - block1 size
+            Assert.AreEqual<long>(target.Size - block1.Length, target.LargestFreeBlockSize);
+            //Free Block1
+            target.Free(block1);
+            //Largest free block should now be slab size
+            Assert.AreEqual<long>(target.Size, target.LargestFreeBlockSize);
         }
 
         /// <summary>
         ///A test for TryAllocate
         ///</summary>
         [TestMethod()]
+        [Description("TryAllocate behaves as expected in different scenarios")]
         public void TryAllocateTest()
         {
             IMemorySlab target = CreateIMemorySlab();
@@ -109,7 +151,7 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<bool>(true, result1);
 
             //allocate rest of slab
-            long restLength = totalLen - 1; 
+            long restLength = totalSize - 1; 
             IMemoryBlock allocatedBlock2 = null;
             bool result2 = target.TryAllocate(restLength, out allocatedBlock2);
             Assert.AreEqual<long>(restLength, allocatedBlock2.Length);
@@ -131,6 +173,7 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for TryAllocate
         ///</summary>
         [TestMethod()]
+        [Description("Allocation of zero length block throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
         public void TryAllocateTest2()
         {
@@ -147,6 +190,7 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for TryAllocate
         ///</summary>
         [TestMethod()]
+        [Description("Allocation of negative length block throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
         public void TryAllocateTest3()
         {
@@ -165,38 +209,46 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for Array
         ///</summary>
         [TestMethod()]
+        [Description("Array length matches Size parameter in constructor")]
         public void ArrayTest()
         {
             IMemorySlab target = CreateIMemorySlab(); 
             byte[] actual;
             actual = target.Array;
-            Assert.AreEqual<long>(totalLen, actual.LongLength);
+            Assert.AreEqual<long>(totalSize, actual.LongLength);
         }
 
         /// <summary>
         ///A test for LargestFreeBlockSize
         ///</summary>
         [TestMethod()]
+        [Description("LargestFreeBlockSize returns the expected value in different scenarios")]
         public void LargestFreeBlockSizeTest()
         {
             IMemorySlab target = CreateIMemorySlab(); 
             long actual;
-            actual = target.LargestFreeBlockSize;
-            Assert.AreEqual<long>(totalLen, actual);
 
+            //LargestFreeBlockSize should be initially the total size of the slab
+            actual = target.LargestFreeBlockSize;
+            Assert.AreEqual<long>(totalSize, actual);
+
+            //Allocate a small block, LargestFreeBlockSize should be the difference from the total slab size
             IMemoryBlock allocatedBlock;
             target.TryAllocate(4321, out allocatedBlock);
             actual = target.LargestFreeBlockSize;
-            Assert.AreEqual<long>(totalLen - 4321, actual);
+            Assert.AreEqual<long>(totalSize - 4321, actual);
 
+            //Allocate a bigger block, LargestFreeBlockSize should decrease by that block size
             IMemoryBlock allocatedBlock2;
             target.TryAllocate(19500, out allocatedBlock2);
             actual = target.LargestFreeBlockSize;
-            Assert.AreEqual<long>(totalLen - 4321 - 19500 , actual);
+            Assert.AreEqual<long>(totalSize - 4321 - 19500 , actual);
 
+            //Free the original small allocation
             target.Free(allocatedBlock);
 
-            Assert.AreEqual<long>((totalLen - 4321 - 19500) > 4321 ? (totalLen - 4321 - 19500) : 4321  , actual);
+            //LargestFreeBlockSize should be the greater of it's previous and the freed block
+            Assert.AreEqual<long>(Math.Max( 4321 , (totalSize - 4321 - 19500))  , actual);
 
             target.Free(allocatedBlock2);
 
@@ -204,15 +256,34 @@ namespace ServerToolkit.BufferManagement.Tests
         }
 
         /// <summary>
-        ///A test for TotalLength
+        ///A test for Size
         ///</summary>
         [TestMethod()]
-        public void TotalLengthTest()
+        [Description("Size property matches constructor parameter")]
+        public void SizeTest()
         {
             IMemorySlab target = CreateIMemorySlab(); 
             long actual;
-            actual = target.TotalLength;
-            Assert.AreEqual<long>(totalLen, actual);
+            actual = target.Size;
+            Assert.AreEqual<long>(totalSize, actual);
         }
+
+
+        [TestMethod]
+        [Description("Construction with a Length parameter of -1 throws exception")]
+        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        public void BadConstructionTest1()
+        {
+            IMemorySlab target = CreateInvalidMemorySlab1(); 
+        }
+
+        [TestMethod]
+        [Description("Construction with a Length parameter of 0 throws exception")]
+        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        public void BadConstructionTest2()
+        {
+            IMemorySlab target = CreateInvalidMemorySlab2();
+        }
+
     }
 }

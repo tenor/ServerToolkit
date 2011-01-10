@@ -103,6 +103,7 @@ namespace ServerToolkit.BufferManagement.Tests
         /// Test for invalid construction 1
         /// </summary>
         [TestMethod]
+        [Description("Construction with negative StartLocation parameter throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
         public void BadConstructionTest1()
         {
@@ -114,6 +115,7 @@ namespace ServerToolkit.BufferManagement.Tests
         /// Test for invalid construction 2
         /// </summary>
         [TestMethod]
+        [Description("Construction with Length parameter of -1 throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
         public void BadConstructionTest2()
         {
@@ -125,6 +127,7 @@ namespace ServerToolkit.BufferManagement.Tests
         /// Test for invalid construction 2
         /// </summary>
         [TestMethod]
+        [Description("Construction with Length parameter of 0 throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
         public void BadConstructionTest3()
         {
@@ -135,6 +138,7 @@ namespace ServerToolkit.BufferManagement.Tests
         /// Test for invalid construction 2
         /// </summary>
         [TestMethod]
+        [Description("Construction with null Slab parameter throws exception")]
         [ExpectedException(typeof(ArgumentNullException))]
         public void BadConstructionTest4()
         {
@@ -146,6 +150,7 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for EndLocation
         ///</summary>
         [TestMethod()]
+        [Description("EndLocation property is accurately calculated")]
         public void EndLocationTest()
         {
             //Correct Property
@@ -160,6 +165,7 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for Length
         ///</summary>
         [TestMethod()]
+        [Description("Length property matches constructor parameter")]
         public void LengthTest()
         {
             IMemoryBlock target = CreateIMemoryBlock(); 
@@ -172,9 +178,10 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for Slab
         ///</summary>
         [TestMethod()]
+        [Description("Slab property matches constructor parameter")]
         public void SlabTest()
         {
-            IMemoryBlock target = CreateIMemoryBlock(); // TODO: Initialize to an appropriate value
+            IMemoryBlock target = CreateIMemoryBlock(); 
             IMemorySlab actual;
             actual = target.Slab;
             Assert.AreEqual<IMemorySlab>(slab, actual);
@@ -184,9 +191,10 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for StartLocation
         ///</summary>
         [TestMethod()]
+        [Description("StartLocation property matches constructor parameter")]
         public void StartLocationTest()
         {
-            IMemoryBlock target = CreateIMemoryBlock(); // TODO: Initialize to an appropriate value
+            IMemoryBlock target = CreateIMemoryBlock();
             long actual;
             actual = target.StartLocation;
             Assert.AreEqual<long>(startLoc, actual);

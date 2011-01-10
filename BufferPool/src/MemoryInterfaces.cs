@@ -29,7 +29,7 @@ namespace ServerToolkit.BufferManagement
 
     internal interface IMemorySlab
     {
-        long TotalLength { get; }
+        long Size { get; }
         bool TryAllocate(long Length, out IMemoryBlock AllocatedBlock);
         void Free(IMemoryBlock AllocatedBlock);
         long LargestFreeBlockSize { get; }

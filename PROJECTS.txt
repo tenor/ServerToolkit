@@ -1,0 +1,13 @@
+PROJECTS/COMPLETION STATUS
+
+Socket Buffer Management  - 80%
+
+Message Queuing Server - 0%
+
+IAsyncResult Queuing Server - 0%
+
+.NET 4.0 SocketAsyncEventArgs Server - 0%
+
+Async Socket Wrapper w/ support for Co-routines - 0%
+
+Concurrent Dictionary/Cache - 0%

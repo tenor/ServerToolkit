@@ -14,6 +14,7 @@ namespace ServerToolkit.BufferManagement.Tests
     public class BufferTest
     {
 
+        static long blockSize = 20000;
 
         private TestContext testContextInstance;
 
@@ -64,161 +65,516 @@ namespace ServerToolkit.BufferManagement.Tests
         #endregion
 
 
+
+        private static byte[] GetRandomizedByteArray(long Length)
+        {
+            byte[] SourceArray = new byte[Length];
+            new Random().NextBytes(SourceArray);
+            return SourceArray;
+        }
+
+        private static Buffer GetNewBuffer(IMemorySlab Slab)
+        {
+
+            IMemoryBlock allocatedMemoryBlock;
+            Slab.TryAllocate(blockSize, out allocatedMemoryBlock);
+
+            Buffer target = new Buffer(allocatedMemoryBlock);
+            return target;
+        }
+
+        private bool ArraysMatch(Array array1, Array array2)
+        {
+            if (array1.LongLength != array2.LongLength)
+            {
+                return false;
+            }
+
+            for (long i = 0; i < array1.LongLength; i++)
+            {
+                if (!array1.GetValue(i).Equals(array2.GetValue(i)))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+
+
         /// <summary>
         ///A test for Buffer Constructor
         ///</summary>
         [TestMethod()]
+        [Description("Construction with null AllocatedMemoryBlock throws exception")]
+        [ExpectedException(typeof(ArgumentNullException))]
         public void BufferConstructorTest()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock);
-            Assert.Inconclusive("TODO: Implement code to verify target");
+            IMemoryBlock nullSlab = null;
+            Buffer target = new Buffer(nullSlab);
         }
 
         /// <summary>
         ///A test for CopyFrom
         ///</summary>
         [TestMethod()]
+        [Description("CopyFrom() copies full source array")]
         public void CopyFromTest()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            byte[] SourceArray = null; // TODO: Initialize to an appropriate value
-            target.CopyFrom(SourceArray);
-            Assert.Inconclusive("A method that does not return a value cannot be verified.");
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target1, target2;
+
+            {
+                Buffer target = GetNewBuffer(slab);
+                target1 = target;
+                byte[] SourceArray = GetRandomizedByteArray(blockSize);
+                target.CopyFrom(SourceArray);
+                byte[] copyOfDestination = new byte[blockSize];
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
+
+                //Source Array is smaller than Buffer Size
+                long blockSizeLess = blockSize - 100;
+                SourceArray = GetRandomizedByteArray(blockSizeLess);
+                target.CopyFrom(SourceArray);
+                copyOfDestination = new byte[blockSizeLess];
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
+
+            }
+
+            //Repeat test with a new buffer to confirm that offsets within slab arrays are accurately tracked
+            //and to make sure there is no off by 1 error
+
+            {
+                Buffer target = GetNewBuffer(slab);
+                target2 = target;
+                byte[] SourceArray = GetRandomizedByteArray(blockSize);
+                target.CopyFrom(SourceArray);
+                byte[] copyOfDestination = new byte[blockSize];
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
+
+                //Source Array is smaller than Buffer Size
+                long blockSizeLess = blockSize - 1;
+                SourceArray = GetRandomizedByteArray(blockSizeLess);
+                target.CopyFrom(SourceArray);
+                copyOfDestination = new byte[blockSizeLess];
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
+
+            }
+
+            target2.Dispose();
+            target1.Dispose();
+
         }
 
         /// <summary>
         ///A test for CopyFrom
         ///</summary>
         [TestMethod()]
-        public void CopyFromTest1()
+        [Description("CopyFrom() throws exception when source is larger than Buffer")]
+        [ExpectedException(typeof(ArgumentException))]
+        public void CopyFromTest2()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            byte[] SourceArray = null; // TODO: Initialize to an appropriate value
-            long SourceIndex = 0; // TODO: Initialize to an appropriate value
-            long Length = 0; // TODO: Initialize to an appropriate value
-            target.CopyFrom(SourceArray, SourceIndex, Length);
-            Assert.Inconclusive("A method that does not return a value cannot be verified.");
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+
+            Buffer target = GetNewBuffer(slab);
+            //Source Array is larger than buffer size
+            long blockSizeMore = blockSize + 1;
+            byte[] SourceArray = GetRandomizedByteArray(blockSizeMore);
+
+            target.CopyFrom(SourceArray);
+
+        }
+
+
+        /// <summary>
+        ///A test for CopyFrom
+        ///</summary>
+        [TestMethod()]
+        [Description("Source arrays copied into the middle of a buffer are copied accurately")]
+        public void CopyFromTest3()
+        {
+
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+
+            byte[] SourceArray = GetRandomizedByteArray(blockSize);
+            target.CopyFrom(SourceArray,1,blockSize - 2);
+            byte[] copyOfDestination = new byte[blockSize - 2];
+            byte[] copyOfSource = new byte[blockSize - 2];
+            Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+            Array.Copy(SourceArray, 1, copyOfSource, 0, copyOfSource.LongLength);
+            Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
+
         }
 
         /// <summary>
         ///A test for CopyTo
         ///</summary>
         [TestMethod()]
+        [Description("CopyTo() copies full buffer")]
         public void CopyToTest()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            byte[] DestinationArray = null; // TODO: Initialize to an appropriate value
-            long DestinationIndex = 0; // TODO: Initialize to an appropriate value
-            long Length = 0; // TODO: Initialize to an appropriate value
-            target.CopyTo(DestinationArray, DestinationIndex, Length);
-            Assert.Inconclusive("A method that does not return a value cannot be verified.");
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target1, target2;
+
+            {
+                Buffer target = GetNewBuffer(slab);
+                target1 = target;
+                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                byte[] DestArray = new byte[blockSize];
+                target.CopyTo(DestArray);
+                byte[] copyOfSource = new byte[blockSize];
+                byte[] copyOfDestination = new byte[blockSize];
+                Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
+
+                //Destination Array is larger than Buffer Size
+                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                DestArray = new byte[blockSize + 100];
+                target.CopyTo(DestArray);
+                copyOfSource = new byte[blockSize];
+                copyOfDestination = new byte[blockSize];
+                Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
+
+            }
+
+            //Repeat test with a new buffer to confirm that offsets within slab arrays are accurately tracked
+            //and to make sure there is no off by 1 error
+
+            {
+                Buffer target = GetNewBuffer(slab);
+                target2 = target;
+                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                byte[] DestArray = new byte[blockSize];
+                target.CopyTo(DestArray);
+                byte[] copyOfSource = new byte[blockSize];
+                byte[] copyOfDestination = new byte[blockSize];
+                Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
+
+                //Destination Array is larger than Buffer Size
+                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                DestArray = new byte[blockSize + 1];
+                target.CopyTo(DestArray);
+                copyOfSource = new byte[blockSize];
+                copyOfDestination = new byte[blockSize];
+                Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
+
+            }
+
+            target2.Dispose();
+            target1.Dispose();
+
+
         }
 
         /// <summary>
         ///A test for CopyTo
         ///</summary>
         [TestMethod()]
-        public void CopyToTest1()
+        [Description("CopyTo() throws exception when destination is smaller than Buffer")]
+        [ExpectedException(typeof(ArgumentException))]
+        public void CopyToTest2()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            byte[] DestinationArray = null; // TODO: Initialize to an appropriate value
-            target.CopyTo(DestinationArray);
-            Assert.Inconclusive("A method that does not return a value cannot be verified.");
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+
+            Buffer target = GetNewBuffer(slab);
+            //Destination array is smaller than buffer size
+
+            byte[] DestArray = new byte[blockSize - 1];
+            target.CopyTo(DestArray);
         }
 
         /// <summary>
-        ///A test for Dispose
+        ///A test for CopyTo
         ///</summary>
         [TestMethod()]
+        [Description("Buffers copied into the middle of a destination array are copied accurately")]
+        public void CopyToTest3()
+        {
+
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+
+            target.CopyFrom(GetRandomizedByteArray(blockSize));
+            byte[] DestArray = new byte[blockSize];
+            target.CopyTo(DestArray, 1, blockSize - 2);
+            byte[] copyOfSource = new byte[blockSize - 2];
+            byte[] copyOfDestination = new byte[blockSize - 2];
+            Array.Copy(DestArray, 1, copyOfDestination, 0, copyOfDestination.LongLength);
+            Array.Copy(target.GetArraySegment().Array, target.GetArraySegment().Offset, copyOfSource, 0, copyOfSource.LongLength);
+            Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
+
+        }
+
+        /// <summary>
+        ///Dispose in different scenarios
+        ///</summary>
+        [TestMethod()]
+        [Description("Dispose works safely more than once, buffer throws ObjectDisposedException if used in disposed state")]
         public void DisposeTest()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
+
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+
+            Buffer target = GetNewBuffer(slab);
             target.Dispose();
-            Assert.Inconclusive("A method that does not return a value cannot be verified.");
+
+            //Call Dispose again, should cause any exceptions to be thrown
+            target.Dispose();
+
+            //Try to work with disposed object. should throw exceptions
+            {
+                bool exceptionThrown = false;
+
+                try
+                {
+                    target.CopyFrom(new byte[] { 0, 1, 2 });
+                }
+                catch (ObjectDisposedException)
+                {
+                    exceptionThrown = true;
+                }
+
+                Assert.IsTrue(exceptionThrown);
+            }
+
+            {
+                bool exceptionThrown = false;
+
+                try
+                {
+                    target.CopyTo(new byte[] { 0, 1, 2 });
+                }
+                catch (ObjectDisposedException)
+                {
+                    exceptionThrown = true;
+                }
+
+                Assert.IsTrue(exceptionThrown);
+            }
+
+            {
+                bool exceptionThrown = false;
+
+                try
+                {
+                    target.GetArraySegment();
+                }
+                catch (ObjectDisposedException)
+                {
+                    exceptionThrown = true;
+                }
+
+                Assert.IsTrue(exceptionThrown);
+            }
+
+
         }
 
         /// <summary>
         ///A test for GetArraySegment
         ///</summary>
         [TestMethod()]
+        [Description("ArraySegment returned by GetArraySegment(int,int) is accurate")]
         public void GetArraySegmentTest()
         {
-            //TODO: Make sure zero lengths are allowed
-
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            int Offset = 0; // TODO: Initialize to an appropriate value
-            int Length = 0; // TODO: Initialize to an appropriate value
-            ArraySegment<byte> expected = new ArraySegment<byte>(); // TODO: Initialize to an appropriate value
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Offset = 0;
+            int Length = (int)(blockSize - 1);
             ArraySegment<byte> actual;
             actual = target.GetArraySegment(Offset, Length);
-            Assert.AreEqual(expected, actual);
-            Assert.Inconclusive("Verify the correctness of this test method.");
+            Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array);
+
+            //Test for full blocksize
+            Offset = 0;
+            Length = (int)blockSize;
+            actual = target.GetArraySegment(Offset, Length);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
+
+
+            //Test for offset of 1
+            Offset = 1;
+            Length = (int)(blockSize - 1);
+            actual = target.GetArraySegment(Offset, Length);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
+
+
         }
+
 
         /// <summary>
         ///A test for GetArraySegment
         ///</summary>
         [TestMethod()]
-        public void GetArraySegmentTest1()
-        {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            ArraySegment<byte> expected = new ArraySegment<byte>(); // TODO: Initialize to an appropriate value
-            ArraySegment<byte> actual;
-            actual = target.GetArraySegment();
-            Assert.AreEqual(expected, actual);
-            Assert.Inconclusive("Verify the correctness of this test method.");
-        }
-
-        /// <summary>
-        ///A test for GetArraySegment
-        ///</summary>
-        [TestMethod()]
+        [Description("ArraySegment returned by GetArraySegment(int,int) for zero lengths is accurate")]
         public void GetArraySegmentTest2()
         {
-            //TODO: Make sure zero lengths are allowed
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Offset = 0;
+            int Length = 0;
+            ArraySegment<byte> actual;
+            actual = target.GetArraySegment(Offset, Length);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
 
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            int Length = 0; // TODO: Initialize to an appropriate value
-            ArraySegment<byte> expected = new ArraySegment<byte>(); // TODO: Initialize to an appropriate value
+        }
+
+
+        /// <summary>
+        ///A test for GetArraySegment
+        ///</summary>
+        [TestMethod()]
+        [Description("GetArraySegment(int,int) with -1 offset parameter throws exception")]
+        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        public void GetArraySegmentTest3()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Offset = -1;
+            int Length = 0;
+            ArraySegment<byte> actual;
+            actual = target.GetArraySegment(Offset, Length);
+        }
+
+        [TestMethod()]
+        [Description("GetArraySegment(int,int) fwith -1 length parameter throws exception")]
+        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        public void GetArraySegmentTest4()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Offset = 0;
+            int Length = -1;
+            ArraySegment<byte> actual;
+            actual = target.GetArraySegment(Offset, Length);
+        }
+
+        /// <summary>
+        ///A test for GetArraySegment
+        ///</summary>
+        [TestMethod()]
+        [Description("ArraySegment returned by GetArraySegment(int) is accurate")]
+        public void GetArraySegmentTest5()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Length = (int)(blockSize - 1);
             ArraySegment<byte> actual;
             actual = target.GetArraySegment(Length);
-            Assert.AreEqual(expected, actual);
-            Assert.Inconclusive("Verify the correctness of this test method.");
+            Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
+
+            //Test again for full blocksize
+            Length = (int)(blockSize - 1);
+            actual = target.GetArraySegment(Length);
+            Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
+
         }
+
+
+        /// <summary>
+        ///A test for GetArraySegment
+        ///</summary>
+        [TestMethod()]
+        [Description("ArraySegment returned by GetArraySegment(int) for zero lengths is accurate")]
+        public void GetArraySegmentTest6()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Length = 0;
+            ArraySegment<byte> actual;
+            actual = target.GetArraySegment(Length);
+            Assert.AreEqual<long>(actual.Offset, 0 + target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Length);
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
+
+        }
+
+
+        [TestMethod()]
+        [Description("GetArraySegment(int,int) with -1 length parameter throws exception")]
+        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        public void GetArraySegmentTest7()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            int Length = -1;
+            ArraySegment<byte> actual;
+            actual = target.GetArraySegment(Length);
+        }
+
+
+        /// <summary>
+        ///A test for GetArraySegment
+        ///</summary>
+        [TestMethod()]
+        [Description("ArraySegment returned by GetArraySegment() is accurate")]
+        public void GetArraySegmentTest8()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+            Buffer target = GetNewBuffer(slab);
+            ArraySegment<byte> actual;
+            actual = target.GetArraySegment();
+            Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Count, Math.Min(target.Length, int.MaxValue ));
+            Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array);
+
+        }
+
 
         /// <summary>
         ///A test for IsDisposed
         ///</summary>
         [TestMethod()]
+        [Description("IsDisposed returns expected value")]
         public void IsDisposedTest()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            bool actual;
-            actual = target.IsDisposed;
-            Assert.Inconclusive("Verify the correctness of this test method.");
+
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+
+            Buffer target = GetNewBuffer(slab);
+            Assert.IsFalse(target.IsDisposed);
+            target.Dispose();
+            Assert.IsTrue(target.IsDisposed);
+
+
         }
 
         /// <summary>
         ///A test for Length
         ///</summary>
         [TestMethod()]
+        [Description("Length matches constructor parameter")]
         public void LengthTest()
         {
-            IMemoryBlock AllocatedMemoryBlock = null; // TODO: Initialize to an appropriate value
-            Buffer target = new Buffer(AllocatedMemoryBlock); // TODO: Initialize to an appropriate value
-            long actual;
-            actual = target.Length;
-            Assert.Inconclusive("Verify the correctness of this test method.");
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+
+            Buffer target = GetNewBuffer(slab);
+            Assert.AreEqual<long>(blockSize, target.Length);
+            target.Dispose();
         }
     }
 }

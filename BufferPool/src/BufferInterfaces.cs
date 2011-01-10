@@ -33,7 +33,7 @@ namespace ServerToolkit.BufferManagement
         bool IsDisposed { get; }
     }
 
-    public interface IBufferPool : IDisposable
+    public interface IBufferPool
     {
         IBuffer GetBuffer(long Size);
         int InitialSlabs { get; }

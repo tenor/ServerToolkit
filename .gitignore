@@ -1,3 +1,5 @@
+#.gitignore sourced from http://stackoverflow.com/q/2143956
+
 #OS junk files
 [Tt]humbs.db
 *.DS_Store

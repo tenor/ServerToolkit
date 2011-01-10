@@ -88,14 +88,21 @@ namespace ServerToolkit.BufferManagement
         protected object sync = new object();
 
         protected readonly bool is64BitMachine;
-        protected readonly long length;
+        protected readonly long slabSize;
         protected readonly BufferPool pool;
         protected long largest = 0;
         protected byte[] array;
 
 
-        internal MemorySlab(long TotalLength, BufferPool Pool)
+        internal MemorySlab(long Size, BufferPool Pool)
         {
+
+            if (Size < 1)
+            {
+                //Can't have zero length or -ve slabs
+                throw new ArgumentOutOfRangeException("Size");
+            }
+            //Pool parameter is allowed to be null for testing purposes
 
             if (System.IntPtr.Size > 4)
             {
@@ -111,10 +118,11 @@ namespace ServerToolkit.BufferManagement
                 IMemoryBlock first;
                 if (!dictStartLoc.TryGetValue(0, out first))
                 {
-                    AddFreeBlock(0, TotalLength);
-                    this.length = TotalLength;
+                    AddFreeBlock(0, Size);
+                    this.slabSize = Size;
                     this.pool = Pool;
-                    array = new byte[TotalLength];
+                    // GC.Collect(); //Perform Garbage Collection before creating large array -- may be useful
+                    array = new byte[Size];
                 }
             }
         }
@@ -124,11 +132,11 @@ namespace ServerToolkit.BufferManagement
             get { return GetLargest(); }
         }
 
-        public long TotalLength
+        public long Size
         {
             get
             {
-                return length;
+                return slabSize;
             }
         }
 
@@ -156,7 +164,8 @@ namespace ServerToolkit.BufferManagement
         {
             if (is64BitMachine)
             {
-                largest = Value;
+                //largest = Value;
+                Interlocked.Exchange(ref largest, Value);
             }
             else
             {
@@ -165,17 +174,17 @@ namespace ServerToolkit.BufferManagement
 
         }
 
-        public virtual bool TryAllocate(long Size, out IMemoryBlock AllocatedBlock)
+        public virtual bool TryAllocate(long Length, out IMemoryBlock AllocatedBlock)
         {
             AllocatedBlock = null;
             lock (sync)
             {
-                if (GetLargest() < Size) return false;
+                if (GetLargest() < Length) return false;
 
                 //search freeBlocksList looking for the smallest available free block
                 long[] keys = new long[freeBlocksList.Count];
                 freeBlocksList.Keys.CopyTo(keys, 0);
-                int index = System.Array.BinarySearch<long>(keys, Size);
+                int index = System.Array.BinarySearch<long>(keys, Length);
                 if (index < 0)
                 {
                     index = ~index;
@@ -198,7 +207,7 @@ namespace ServerToolkit.BufferManagement
                 RemoveFreeBlock(foundBlock);
 
 
-                if (foundBlock.Length == Size)
+                if (foundBlock.Length == Length)
                 {
                     //Perfect match
                     AllocatedBlock = foundBlock;
@@ -207,12 +216,12 @@ namespace ServerToolkit.BufferManagement
                 {
                     //FoundBlock is larger than requested block size
 
-                    AllocatedBlock = new MemoryBlock(foundBlock.StartLocation, Size, this);
+                    AllocatedBlock = new MemoryBlock(foundBlock.StartLocation, Length, this);
 
                     long newFreeStartLocation = AllocatedBlock.EndLocation + 1;
-                    long newFreeSize = foundBlock.Length - Size;
+                    long newFreeSize = foundBlock.Length - Length;
 
-                    //add new Freeblock with smaller space
+                    //add new Freeblock with the smaller remaining space
                     AddFreeBlock(newFreeStartLocation, newFreeSize);
 
 
@@ -271,21 +280,15 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+
+        //This method does not detect if the allocatedBlock is indeed from this slab.
+        //Callers should make sure that the allocatedblock belongs to the right slab.
         public virtual void Free(IMemoryBlock AllocatedBlock)
         {
             lock (sync)
             {
 
-                //TODO: Roll commected out code into a test and have it check all startlocs and endlocs to make sure there was no overlap
-                //Verify that Allocated block was truly allocated
-                /*
-                IMemoryBlock foundBlock;
-                if ((dictStartLoc.TryGetValue(AllocatedBlock.StartLocation, out foundBlock)) || foundBlock.Length != AllocatedBlock.Length)
-                {
-                    throw new InvalidOperationException("AllocatedBlock was not found in MemorySlab");
-                }
-                 */
-
+                //Attempt to coalesce/merge free blocks around the allocateblock to be freed.
                 long? newFreeStartLocation = null;
                 long newFreeSize = 0;
 
@@ -309,9 +312,9 @@ namespace ServerToolkit.BufferManagement
                 if (!newFreeStartLocation.HasValue) newFreeStartLocation = AllocatedBlock.StartLocation;
                 newFreeSize += AllocatedBlock.Length;
 
-                if (AllocatedBlock.EndLocation + 1 < TotalLength)
+                if (AllocatedBlock.EndLocation + 1 < Size)
                 {
-                    // Check if block after this one is free
+                    // Check if block next to (below) this one is free
                     IMemoryBlock blockAfter;
                     if (dictStartLoc.TryGetValue(AllocatedBlock.EndLocation + 1, out blockAfter))
                     {
@@ -326,7 +329,7 @@ namespace ServerToolkit.BufferManagement
 
             }
 
-            if (GetLargest() == TotalLength)
+            if (GetLargest() == Size)
             {
                 //This slab is empty. prod pool to do some cleanup
                 if (pool != null)
