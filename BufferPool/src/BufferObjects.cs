@@ -166,7 +166,8 @@ namespace ServerToolkit.BufferManagement
 
         private long slabSize;
         private int initialSlabs, subsequentSlabs;
-        private object sync = new object();
+        private object sync_slabList = new object(); //synchronizes access to the array of slabs
+        private object sync_newSlab = new object(); //synchronizes access to new slab creation
         private List<IMemorySlab> slabs = new List<IMemorySlab>();
         private readonly IMemorySlab firstSlab;
 
@@ -181,7 +182,7 @@ namespace ServerToolkit.BufferManagement
             this.initialSlabs = InitialSlabs;
             this.subsequentSlabs = SubsequentSlabs;
 
-            lock (sync)
+            lock (sync_slabList)
             {
                 if (slabs.Count == 0)
                 {
@@ -206,48 +207,79 @@ namespace ServerToolkit.BufferManagement
             //      to avoid the lock statement below
 
             IMemorySlab[] slabArr;
-            lock (sync)
+            lock (sync_slabList)
             {
                 slabArr = slabs.ToArray();
             }
 
 
             IMemoryBlock allocatedBlock;
-            for (int i = 0; i < slabArr.Length; i++)
+            if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
             {
-                if (slabArr[i].LargestFreeBlockSize >= Length)
-                {
-                    if (slabArr[i].TryAllocate(Length, out allocatedBlock))
-                    {
-                        return new Buffer(allocatedBlock);
-                    }
-                }
+                return new Buffer(allocatedBlock);
             }
 
-            //Unable to find available free space, so create new slab
-            MemorySlab newSlab = new MemorySlab(slabSize, this);
 
-            newSlab.TryAllocate(Length, out allocatedBlock);
-
-            //Add new Slab to collection
-            lock (sync)
+            lock (sync_newSlab)
             {
-                slabs.Add(newSlab);
-
-                //Add extra slabs as requested in object properties
-                for (int i = 0; i < subsequentSlabs - 1; i++)
+                lock (sync_slabList)
                 {
-                    slabs.Add(new MemorySlab(slabSize, this));
+                    slabArr = slabs.ToArray();
                 }
+
+                //Look again for free block
+                if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+                {
+                    return new Buffer(allocatedBlock);
+                }
+
+                //Unable to find available free space, so create new slab
+                MemorySlab newSlab = new MemorySlab(slabSize, this);
+
+                newSlab.TryAllocate(Length, out allocatedBlock);
+
+                lock (sync_slabList)
+                {
+                    //Add new Slab to collection
+
+                    slabs.Add(newSlab);
+
+                    //Add extra slabs as requested in object properties
+                    for (int i = 0; i < subsequentSlabs - 1; i++)
+                    {
+                        slabs.Add(new MemorySlab(slabSize, this));
+                    }
+                }
+
             }
 
             return new Buffer(allocatedBlock);
 
         }
 
+
+        //Helper method that searches for free block in an array of slabs and returns the allocated block
+        private static bool TryAllocateBlockInSlabs(long Length, IMemorySlab[] Slabs, out IMemoryBlock allocatedBlock)
+        {
+            allocatedBlock = null;
+            for (int i = 0; i < Slabs.Length; i++)
+            {
+                if (Slabs[i].LargestFreeBlockSize >= Length)
+                {
+                    if (Slabs[i].TryAllocate(Length, out allocatedBlock))
+                    {                        
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+
         internal void TryFreeSlab()
         {
-            lock (sync)
+            lock (sync_slabList)
             {
                 int emptySlabsCount = 0;
                 int lastemptySlab = -1;

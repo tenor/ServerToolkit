@@ -53,11 +53,19 @@
     </CodeAnalysisDependentAssemblyPaths>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BigMemory.cs" />
     <Compile Include="BufferPoolTest.cs" />
     <Compile Include="BufferTest.cs" />
+    <Compile Include="concurrencyTest.cs" />
     <Compile Include="IMemoryBlockTest.cs" />
     <Compile Include="IMemorySlabTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ServerToolkit.BufferManagement.csproj">
+      <Project>{DB69A550-67B0-40EC-A27E-CFD646D04615}</Project>
+      <Name>ServerToolkit.BufferManagement</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
