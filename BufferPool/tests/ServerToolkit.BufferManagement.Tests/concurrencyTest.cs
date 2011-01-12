@@ -10,51 +10,65 @@ namespace ServerToolkit.BufferManagement.Tests
     [TestClass]
     public class concurrencyTest
     {
+
+        //TODO: Add memory test that performs a hundred get buffers, then silmultaneously randomly disposes some and creates some
+        //Then verify that the total tally is correct and the number of expected slabs is accurate.
+
         [TestMethod]
         [Description("Verifies that silmultaneous access to a buffer pool is synchronized")] 
         public void HundredGetBuffers()
         {
-            BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
+                BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
 
-            //PLAN:
-            //Create 100 threads. Odd numbered threads will request buffer sizes of 314567 bytes
-            //whereas even numbered threads will request buffer sizes of 314574 bytes
-            //for a total allocation of 31457100 bytes.
-            //If everything goes well there will be no overlap in allocated buffers
-            //and there'll be no free space greater than 314574 (the lower number) on total slabs - 1
-            //and slabs should be 4
+                //PLAN:
+                //Create 100 threads. Odd numbered threads will request buffer sizes of 314567 bytes
+                //whereas even numbered threads will request buffer sizes of 314574 bytes
+                //for a total allocation of 31457100 bytes.
+                //If everything goes well there will be no overlap in allocated buffers
+                //and there'll be no free space greater than 314574 (the lower number) on total slabs - 1
+                //and slabs should be 4
 
-            List<IBuffer> bufferList = new List<IBuffer>();
+                List<IBuffer> bufferList = new List<IBuffer>();
 
-            int threadNumber = 100;
-            int sizeOdd = 314567;
-            int sizeEven = 314574;
+                int threadNumber = 100;
+                int sizeOdd = 314567;
+                int sizeEven = 314574;
 
-            AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
-            AssertIsContiguous(bufferList);
-            Assert.IsTrue(pool.SlabCount == 3 || pool.SlabCount == 4, "SlabCount is " + pool.SlabCount + ". Was expecting 3 or 4");
+                AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
+                AssertIsContiguous(bufferList);
+                Assert.IsTrue(pool.SlabCount == 3 || pool.SlabCount == 4, "SlabCount is " + pool.SlabCount + ". Was expecting 3 or 4");
         }
 
         [TestMethod]
-        [Description("Verifies that silmultaneous access to a buffer pool is synchronized and will fit exactly in slabs")]
-        public void HundredGetBuffersExactFit()
+        [Description("HundredGetBuffers times thirty")]
+        public void ThreeThousandGetBuffers()
         {
-            BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
+                BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
 
-            //PLAN:
-            //Same as HundredGetBuffersExactFit, except that slab size have been selected such that 20 buffers will fit in a slab.
-            //Therefore there must be only 5 slabs after test is complete.
+                //PLAN:
+                //Just like HundredGetBuffers but with 3000 threads
 
-            List<IBuffer> bufferList = new List<IBuffer>();
+                List<IBuffer> bufferList = new List<IBuffer>();
 
-            int threadNumber = 100;
-            int sizeOdd = 524288;
-            int sizeEven = 524288;
+                int threadNumber = 3000;
+                int sizeOdd = 524288;
+                int sizeEven = 524288;
 
-            AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
+                AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
+                AssertIsContiguous(bufferList);
+                Assert.IsTrue(pool.SlabCount == 150 || pool.SlabCount == 151, "SlabCount is " + pool.SlabCount + ". Was expecting 150 or 151");
 
-            AssertIsContiguous(bufferList);
-            Assert.AreEqual(5, pool.SlabCount);
+        }
+
+
+        [TestMethod]
+        [Description("Runs HundredGetBuffers 50 times")]
+        public void LongRunningHundredGetBuffers()
+        {
+            for (int count = 0; count < 50; count++)
+            {
+                HundredGetBuffers();
+            }
         }
 
 

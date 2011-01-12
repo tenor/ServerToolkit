@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace ServerToolkit.BufferManagement
 {
@@ -170,6 +171,7 @@ namespace ServerToolkit.BufferManagement
         private object sync_newSlab = new object(); //synchronizes access to new slab creation
         private List<IMemorySlab> slabs = new List<IMemorySlab>();
         private readonly IMemorySlab firstSlab;
+        private int singleSlabPool; //-1 or 0, used for faster access if only one slab is available
 
         public BufferPool(long SlabSize, int InitialSlabs, int SubsequentSlabs)
         {
@@ -186,6 +188,15 @@ namespace ServerToolkit.BufferManagement
             {
                 if (slabs.Count == 0)
                 {
+                    if (initialSlabs > 1)
+                    {
+                        Interlocked.Exchange(ref singleSlabPool, 0); //false
+                    }
+                    else
+                    {
+                        Interlocked.Exchange(ref singleSlabPool, -1); //true
+                    }
+
                     for (int i = 0; i < initialSlabs; i++ )
                     {
                         slabs.Add(new MemorySlab(slabSize, this));
@@ -203,33 +214,51 @@ namespace ServerToolkit.BufferManagement
 
             if (Length == 0) return new Buffer(firstSlab.Array); //Return an empty buffer
 
-            //TODO: Add an optimization that would check if there is only one slab and create the array below from firstSlab
-            //      to avoid the lock statement below
-
-            IMemorySlab[] slabArr;
-            lock (sync_slabList)
-            {
-                slabArr = slabs.ToArray();
-            }
-
-
             IMemoryBlock allocatedBlock;
-            if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+            IMemorySlab[] slabArr;
+
+            if (singleSlabPool == -1)
             {
-                return new Buffer(allocatedBlock);
+                //Optimization: Chances are that there'll be just one slab in a pool, so access it directly 
+                //and avoid the lock statement involved while creating an array of slabs.
+
+                //Note that even if singleSlabPool is inaccurate, this method will still work properly.
+                //The optimization is effective because singleSlabPool will be accurate majority of the time.
+
+                slabArr = new IMemorySlab[] { firstSlab };
+                if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+                {
+                    return new Buffer(allocatedBlock);
+                }
+
+                Interlocked.Exchange(ref singleSlabPool, 0); // Slab count will soon be incremented
             }
-
-
-            lock (sync_newSlab)
+            else
             {
+
                 lock (sync_slabList)
                 {
                     slabArr = slabs.ToArray();
                 }
 
-                //Look again for free block
                 if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
                 {
+                    return new Buffer(allocatedBlock);
+                }
+            }
+
+
+            lock (sync_newSlab)
+            {
+                //Look again for free block
+                lock (sync_slabList)
+                {
+                    slabArr = slabs.ToArray();
+                }
+                
+                if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+                {
+                    //found it -- leave
                     return new Buffer(allocatedBlock);
                 }
 
@@ -297,6 +326,9 @@ namespace ServerToolkit.BufferManagement
                     //remove the last empty one
                     slabs.RemoveAt(lastemptySlab);
                 }
+
+                if (slabs.Count == 1) Interlocked.Exchange(ref singleSlabPool, -1);
+
             }
         }
 

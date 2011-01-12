@@ -12,6 +12,21 @@ namespace ServerToolkit.BufferManagement.Tests
     [TestClass]
     public class BigMemory
     {
+        //TODO: Large Memory tests
+
+        /*
+         * 
+         * 2. Memory test:
+Create buffers that are greater than the 32 bit space. Check to make sure buffers are properly allocated. Check to see that all relevant methods work smoothly. Check to see that new slabs are created without problems.
+
+3. Slab destruction test on a massive level:
+Create a whole bunch of slabs.
+Free them one by one. Keep freeing to see if it waits until there are two free slabs before freeing a slab and that it doesn't go below two.
+
+4. When you need to send a message larger than 2GB. See if ArraySegment can start at a long length greater than the 2GB limit and verify it's content.
+         * 
+         */
+
         public BigMemory()
         {
             //
