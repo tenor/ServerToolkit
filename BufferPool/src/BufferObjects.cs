@@ -325,9 +325,9 @@ namespace ServerToolkit.BufferManagement
                 {
                     //remove the last empty one
                     slabs.RemoveAt(lastemptySlab);
-                }
 
-                if (slabs.Count == 1) Interlocked.Exchange(ref singleSlabPool, -1);
+                    if (slabs.Count == 1) Interlocked.Exchange(ref singleSlabPool, -1);
+                }
 
             }
         }
