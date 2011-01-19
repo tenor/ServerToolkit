@@ -22,13 +22,13 @@ using System.Threading;
 
 namespace ServerToolkit.BufferManagement
 {
-    public class Buffer : IBuffer
+    public class ManagedBuffer : IBuffer
     {
         protected bool disposed = false;
         internal IMemoryBlock memoryBlock;
         byte[] slabArray;
 
-        internal Buffer(IMemoryBlock AllocatedMemoryBlock)
+        internal ManagedBuffer(IMemoryBlock AllocatedMemoryBlock)
         {
             if (AllocatedMemoryBlock == null) throw new ArgumentNullException("AllocatedMemoryBlock");
             memoryBlock = AllocatedMemoryBlock;
@@ -37,7 +37,7 @@ namespace ServerToolkit.BufferManagement
 
 
         //Used for Creating an empty (zero-length) buffer
-        internal Buffer(byte[] SlabArray)
+        internal ManagedBuffer(byte[] SlabArray)
         {
             if (SlabArray == null) throw new ArgumentNullException("SlabArray");
             memoryBlock = null;
@@ -45,7 +45,7 @@ namespace ServerToolkit.BufferManagement
         }
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
-        public virtual ArraySegment<byte> GetArraySegment()
+        public virtual IList<ArraySegment<byte>> GetArraySegment()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
@@ -60,13 +60,13 @@ namespace ServerToolkit.BufferManagement
             
         }
 
-        public virtual ArraySegment<byte> GetArraySegment(int Length)
+        public virtual IList<ArraySegment<byte>> GetArraySegment(int Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             return GetArraySegment(0, Length);
         }
 
-        public ArraySegment<byte> GetArraySegment(int Offset, int Length)
+        public IList<ArraySegment<byte>> GetArraySegment(int Offset, int Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (Length > this.Length || Length < 0)
@@ -78,9 +78,11 @@ namespace ServerToolkit.BufferManagement
                 throw new ArgumentOutOfRangeException("Offset");
             }
 
+            IList<ArraySegment<byte>> result = new List<ArraySegment<byte>>();
             if (this.Length == 0)
             {
-                return new ArraySegment<byte>(slabArray, 0, 0);
+                result.Add(new ArraySegment<byte>(slabArray, 0, 0));
+                return result;
             }
             else
             {
@@ -88,7 +90,8 @@ namespace ServerToolkit.BufferManagement
                 {
                     throw new InvalidOperationException("ArraySegment location exceeds int.MaxValue");
                 }
-                return new ArraySegment<byte>(memoryBlock.Slab.Array, Offset + (int)memoryBlock.StartLocation, Length);
+                result.Add(new ArraySegment<byte>(memoryBlock.Slab.Array, Offset + (int)memoryBlock.StartLocation, Length));
+                return result;
             }
         }
 
@@ -212,7 +215,7 @@ namespace ServerToolkit.BufferManagement
 
             if (Length < 0) throw new ArgumentException("Length must be greater than 0");
 
-            if (Length == 0) return new Buffer(firstSlab.Array); //Return an empty buffer
+            if (Length == 0) return new ManagedBuffer(firstSlab.Array); //Return an empty buffer
 
             IMemoryBlock allocatedBlock;
             IMemorySlab[] slabArr;
@@ -228,7 +231,7 @@ namespace ServerToolkit.BufferManagement
                 slabArr = new IMemorySlab[] { firstSlab };
                 if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
                 {
-                    return new Buffer(allocatedBlock);
+                    return new ManagedBuffer(allocatedBlock);
                 }
 
                 Interlocked.Exchange(ref singleSlabPool, 0); // Slab count will soon be incremented
@@ -243,7 +246,7 @@ namespace ServerToolkit.BufferManagement
 
                 if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
                 {
-                    return new Buffer(allocatedBlock);
+                    return new ManagedBuffer(allocatedBlock);
                 }
             }
 
@@ -259,7 +262,7 @@ namespace ServerToolkit.BufferManagement
                 if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
                 {
                     //found it -- leave
-                    return new Buffer(allocatedBlock);
+                    return new ManagedBuffer(allocatedBlock);
                 }
 
                 //Unable to find available free space, so create new slab
@@ -282,7 +285,7 @@ namespace ServerToolkit.BufferManagement
 
             }
 
-            return new Buffer(allocatedBlock);
+            return new ManagedBuffer(allocatedBlock);
 
         }
 

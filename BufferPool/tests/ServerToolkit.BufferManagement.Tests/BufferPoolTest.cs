@@ -191,7 +191,7 @@ namespace ServerToolkit.BufferManagement.Tests
             long length3 = 100 * 1024;
             actual = target.GetBuffer(length3);
             Assert.AreEqual(length3, actual.Length);
-            Assert.IsTrue(actual.GetArraySegment().Offset == length);
+            Assert.IsTrue(actual.GetArraySegment()[0].Offset == length);
 
         }
 

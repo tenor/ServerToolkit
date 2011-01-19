@@ -17,14 +17,15 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 
 namespace ServerToolkit.BufferManagement
 {
     public interface IBuffer : IDisposable
     {
-        ArraySegment<byte> GetArraySegment();
-        ArraySegment<byte> GetArraySegment(int Length);
-        ArraySegment<byte> GetArraySegment(int Offset, int Length);
+        IList<ArraySegment<byte>> GetArraySegment();
+        IList<ArraySegment<byte>> GetArraySegment(int Length);
+        IList<ArraySegment<byte>> GetArraySegment(int Offset, int Length);
         void CopyTo(byte[] DestinationArray);
         void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length);
         void CopyFrom(byte[] SourceArray);
