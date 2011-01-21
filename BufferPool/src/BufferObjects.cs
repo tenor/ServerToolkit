@@ -45,28 +45,28 @@ namespace ServerToolkit.BufferManagement
         }
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
-        public virtual IList<ArraySegment<byte>> GetArraySegment()
+        public virtual IList<ArraySegment<byte>> GetArraySegments()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
             if (this.Length <= int.MaxValue)
             {
-                return GetArraySegment(0, (int)this.Length);
+                return GetArraySegments(0, (int)this.Length);
             }
             else
             {
-                return GetArraySegment(0, int.MaxValue);
+                return GetArraySegments(0, int.MaxValue);
             }
             
         }
 
-        public virtual IList<ArraySegment<byte>> GetArraySegment(int Length)
+        public virtual IList<ArraySegment<byte>> GetArraySegments(int Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            return GetArraySegment(0, Length);
+            return GetArraySegments(0, Length);
         }
 
-        public IList<ArraySegment<byte>> GetArraySegment(int Offset, int Length)
+        public IList<ArraySegment<byte>> GetArraySegments(int Offset, int Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (Length > this.Length || Length < 0)
