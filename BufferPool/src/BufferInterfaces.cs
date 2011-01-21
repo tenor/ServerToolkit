@@ -24,8 +24,8 @@ namespace ServerToolkit.BufferManagement
     public interface IBuffer : IDisposable
     {
         IList<ArraySegment<byte>> GetArraySegments();
-        IList<ArraySegment<byte>> GetArraySegments(int Length);
-        IList<ArraySegment<byte>> GetArraySegments(int Offset, int Length);
+        IList<ArraySegment<byte>> GetArraySegments(long Length);
+        IList<ArraySegment<byte>> GetArraySegments(long Offset, long Length);
         void CopyTo(byte[] DestinationArray);
         void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length);
         void CopyFrom(byte[] SourceArray);

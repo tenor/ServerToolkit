@@ -45,10 +45,12 @@ namespace ServerToolkit.BufferManagement
         }
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
+        //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This method should be able to accept length > int.MaxValue after implementing multi-array-segments
         public virtual IList<ArraySegment<byte>> GetArraySegments()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
+            //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This int.MaxValue should be removed after implementing multi-array-segments
             if (this.Length <= int.MaxValue)
             {
                 return GetArraySegments(0, (int)this.Length);
@@ -60,13 +62,13 @@ namespace ServerToolkit.BufferManagement
             
         }
 
-        public virtual IList<ArraySegment<byte>> GetArraySegments(int Length)
+        public virtual IList<ArraySegment<byte>> GetArraySegments(long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             return GetArraySegments(0, Length);
         }
 
-        public IList<ArraySegment<byte>> GetArraySegments(int Offset, int Length)
+        public IList<ArraySegment<byte>> GetArraySegments(long Offset, long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (Length > this.Length || Length < 0)
@@ -86,11 +88,13 @@ namespace ServerToolkit.BufferManagement
             }
             else
             {
+                //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This exception should not take place after implementing multi-array-segments
+                // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be int.MaxValue;
                 if (Offset + memoryBlock.StartLocation > int.MaxValue)
                 {
                     throw new InvalidOperationException("ArraySegment location exceeds int.MaxValue");
                 }
-                result.Add(new ArraySegment<byte>(memoryBlock.Slab.Array, Offset + (int)memoryBlock.StartLocation, Length));
+                result.Add(new ArraySegment<byte>(memoryBlock.Slab.Array, (int)(Offset + memoryBlock.StartLocation), (int)Length));
                 return result;
             }
         }
