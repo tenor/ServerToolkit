@@ -30,7 +30,7 @@ namespace ServerToolkit.BufferManagement
         void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length);
         void CopyFrom(byte[] SourceArray);
         void CopyFrom(byte[] SourceArray, long SourceIndex, long Length);
-        long Length { get; }
+        long Size { get; }
         bool IsDisposed { get; }
     }
 

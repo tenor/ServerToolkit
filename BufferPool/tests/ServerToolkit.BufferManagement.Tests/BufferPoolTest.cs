@@ -178,19 +178,19 @@ namespace ServerToolkit.BufferManagement.Tests
             long length = 20 * 1024; 
             IBuffer actual;
             actual = target.GetBuffer(length);
-            Assert.AreEqual(length, actual.Length);
+            Assert.AreEqual(length, actual.Size);
 
 
             //Confirm that zero-length buffers work
             long length2 = 0;
             actual = target.GetBuffer(length2);
-            Assert.AreEqual(length2, actual.Length);
+            Assert.AreEqual(length2, actual.Size);
 
             //Get another buffer and confirm that it is contiguous from the first acquired buffer. 
             //i.e. the zero buffer "in-between" didn't cause any harm
             long length3 = 100 * 1024;
             actual = target.GetBuffer(length3);
-            Assert.AreEqual(length3, actual.Length);
+            Assert.AreEqual(length3, actual.Size);
             Assert.IsTrue(actual.GetArraySegments()[0].Offset == length);
 
         }

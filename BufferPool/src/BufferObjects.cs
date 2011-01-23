@@ -51,9 +51,9 @@ namespace ServerToolkit.BufferManagement
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
             //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This int.MaxValue should be removed after implementing multi-array-segments
-            if (this.Length <= int.MaxValue)
+            if (this.Size <= int.MaxValue)
             {
-                return GetArraySegments(0, (int)this.Length);
+                return GetArraySegments(0, (int)this.Size);
             }
             else
             {
@@ -71,17 +71,17 @@ namespace ServerToolkit.BufferManagement
         public IList<ArraySegment<byte>> GetArraySegments(long Offset, long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > this.Length || Length < 0)
+            if (Length > this.Size || Length < 0)
             {
                 throw new ArgumentOutOfRangeException("Length");
             }
-            if (Offset > this.Length || Offset < 0)
+            if (Offset > this.Size || Offset < 0)
             {
                 throw new ArgumentOutOfRangeException("Offset");
             }
 
             IList<ArraySegment<byte>> result = new List<ArraySegment<byte>>();
-            if (this.Length == 0)
+            if (this.Size == 0)
             {
                 result.Add(new ArraySegment<byte>(slabArray, 0, 0));
                 return result;
@@ -104,14 +104,14 @@ namespace ServerToolkit.BufferManagement
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
-            CopyTo(DestinationArray, 0, this.Length);
+            CopyTo(DestinationArray, 0, this.Size);
         }
 
         public void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > this.Length) throw new ArgumentException("Buffer length is greater than Destination array length");
-            if (this.Length == 0) return;
+            if (Length > this.Size) throw new ArgumentException("Buffer length is greater than Destination array length");
+            if (this.Size == 0) return;
 
             Array.Copy(memoryBlock.Slab.Array, memoryBlock.StartLocation, DestinationArray, DestinationIndex, Length);
         }
@@ -126,8 +126,8 @@ namespace ServerToolkit.BufferManagement
         public void CopyFrom(byte[] SourceArray, long SourceIndex, long Length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > (SourceIndex + this.Length)) throw new ArgumentException("Source array length is less than buffer length");
-            if (this.Length == 0) return;
+            if (Length > (SourceIndex + this.Size)) throw new ArgumentException("Source array length is less than buffer length");
+            if (this.Size == 0) return;
 
             Array.Copy(SourceArray, SourceIndex, memoryBlock.Slab.Array, memoryBlock.StartLocation, Length);
         }
@@ -161,7 +161,7 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-        public long Length
+        public long Size
         {
             get { return memoryBlock == null ? 0 : memoryBlock.Length; }
         }

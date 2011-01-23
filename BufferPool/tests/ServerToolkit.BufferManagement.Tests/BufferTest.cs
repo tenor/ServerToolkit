@@ -539,7 +539,7 @@ namespace ServerToolkit.BufferManagement.Tests
             ArraySegment<byte> actual;
             actual = target.GetArraySegments()[0];
             Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Math.Min(target.Length, int.MaxValue ));
+            Assert.AreEqual<long>(actual.Count, Math.Min(target.Size, int.MaxValue ));
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array);
 
         }
@@ -573,7 +573,7 @@ namespace ServerToolkit.BufferManagement.Tests
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
 
             ManagedBuffer target = GetNewBuffer(slab);
-            Assert.AreEqual<long>(blockSize, target.Length);
+            Assert.AreEqual<long>(blockSize, target.Size);
             target.Dispose();
         }
     }
