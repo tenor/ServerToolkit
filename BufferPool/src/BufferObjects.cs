@@ -16,66 +16,88 @@
 */
 #endregion
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
-
 namespace ServerToolkit.BufferManagement
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Threading;
+
+    /// <summary>
+    /// Represents an allocated buffer that is managed within a buffer pool.
+    /// </summary>
     public class ManagedBuffer : IBuffer
     {
-        protected bool disposed = false;
+
         internal IMemoryBlock memoryBlock;
+        protected bool disposed = false;
         byte[] slabArray;
 
-        internal ManagedBuffer(IMemoryBlock AllocatedMemoryBlock)
+        internal ManagedBuffer(IMemoryBlock allocatedMemoryBlock)
         {
-            if (AllocatedMemoryBlock == null) throw new ArgumentNullException("AllocatedMemoryBlock");
-            memoryBlock = AllocatedMemoryBlock;
+            if (allocatedMemoryBlock == null) throw new ArgumentNullException("AllocatedMemoryBlock");
+            memoryBlock = allocatedMemoryBlock;
             slabArray = null;
         }
 
 
         //Used for Creating an empty (zero-length) buffer
-        internal ManagedBuffer(byte[] SlabArray)
+        internal ManagedBuffer(byte[] slabArray)
         {
-            if (SlabArray == null) throw new ArgumentNullException("SlabArray");
+            if (slabArray == null) throw new ArgumentNullException("SlabArray");
             memoryBlock = null;
-            slabArray = SlabArray;
+            this.slabArray = slabArray;
         }
+
+
+        public bool IsDisposed
+        {
+            get { return disposed; }
+        }
+
+        public long Size
+        {
+            get { return memoryBlock == null ? 0 : memoryBlock.Length; }
+        }
+
+        public int SegmentCount
+        {
+            get { return 1; /*Always 1 for now */ }
+        }
+
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
         //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This method should be able to accept length > int.MaxValue after implementing multi-array-segments
-        public virtual IList<ArraySegment<byte>> GetArraySegments()
+        public virtual IList<ArraySegment<byte>> GetSegments()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
             //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This int.MaxValue should be removed after implementing multi-array-segments
             if (this.Size <= int.MaxValue)
             {
-                return GetArraySegments(0, (int)this.Size);
+                return GetSegments(0, (int)this.Size);
             }
             else
             {
-                return GetArraySegments(0, int.MaxValue);
+                return GetSegments(0, int.MaxValue);
             }
             
         }
 
-        public virtual IList<ArraySegment<byte>> GetArraySegments(long Length)
+        public virtual IList<ArraySegment<byte>> GetSegments(long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            return GetArraySegments(0, Length);
+            return GetSegments(0, length);
         }
 
-        public IList<ArraySegment<byte>> GetArraySegments(long Offset, long Length)
+        public IList<ArraySegment<byte>> GetSegments(long offset, long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > this.Size || Length < 0)
+            if (length > this.Size || length < 0)
             {
                 throw new ArgumentOutOfRangeException("Length");
             }
-            if (Offset > this.Size || Offset < 0)
+
+            if (offset > this.Size || offset < 0)
             {
                 throw new ArgumentOutOfRangeException("Offset");
             }
@@ -90,106 +112,110 @@ namespace ServerToolkit.BufferManagement
             {
                 //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This exception should not take place after implementing multi-array-segments
                 // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be int.MaxValue;
-                if (Offset + memoryBlock.StartLocation > int.MaxValue)
+                if (offset + memoryBlock.StartLocation > int.MaxValue)
                 {
                     throw new InvalidOperationException("ArraySegment location exceeds int.MaxValue");
                 }
-                result.Add(new ArraySegment<byte>(memoryBlock.Slab.Array, (int)(Offset + memoryBlock.StartLocation), (int)Length));
+
+                result.Add(new ArraySegment<byte>(memoryBlock.Slab.Array, (int)(offset + memoryBlock.StartLocation), (int)length));
                 return result;
             }
         }
 
 
-        public void CopyTo(byte[] DestinationArray)
+        public void CopyTo(byte[] destinationArray)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
-            CopyTo(DestinationArray, 0, this.Size);
+            CopyTo(destinationArray, 0, this.Size);
         }
 
-        public void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length)
+        public void CopyTo(byte[] destinationArray, long destinationIndex, long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > this.Size) throw new ArgumentException("Buffer length is greater than Destination array length");
+            if (destinationArray == null) throw new ArgumentNullException("destinationArray");
+            if (length > this.Size) throw new ArgumentException("Buffer length is greater than Destination array length");
             if (this.Size == 0) return;
 
-            Array.Copy(memoryBlock.Slab.Array, memoryBlock.StartLocation, DestinationArray, DestinationIndex, Length);
+            Array.Copy(memoryBlock.Slab.Array, memoryBlock.StartLocation, destinationArray, destinationIndex, length);
         }
 
-        public void CopyFrom(byte[] SourceArray)
+        public void CopyFrom(byte[] sourceArray)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
-            CopyFrom(SourceArray, 0, SourceArray.Length);
+            CopyFrom(sourceArray, 0, sourceArray.Length);
         }
 
-        public void CopyFrom(byte[] SourceArray, long SourceIndex, long Length)
+        public void CopyFrom(byte[] sourceArray, long sourceIndex, long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (Length > (SourceIndex + this.Size)) throw new ArgumentException("Source array length is less than buffer length");
+            if (sourceArray == null) throw new ArgumentNullException("sourceArray");            
+            if (length > (sourceIndex + this.Size)) throw new ArgumentException("Source array length is less than buffer length");
             if (this.Size == 0) return;
 
-            Array.Copy(SourceArray, SourceIndex, memoryBlock.Slab.Array, memoryBlock.StartLocation, Length);
-        }
-
-        public bool IsDisposed
-        {
-            get { return disposed; }
+            Array.Copy(sourceArray, sourceIndex, memoryBlock.Slab.Array, memoryBlock.StartLocation, length);
         }
 
         public void Dispose()
         {
-            if (!disposed)
-            {
-                disposed = true;
-
-                try
-                {
-                    if (memoryBlock != null)
-                    {
-                        memoryBlock.Slab.Free(memoryBlock);
-                    }
-                }
-                catch
-                {
-                    //Suppress exception in release mode
-                    #if DEBUG                    
-                        throw;
-                    #endif
-                }
-
-            }
+            Dispose(true);
         }
 
-        public long Size
+        protected virtual void Dispose(bool disposing)
         {
-            get { return memoryBlock == null ? 0 : memoryBlock.Length; }
+            if (disposing)
+            {
+                if (!disposed)
+                {
+                    disposed = true;
+
+                    try
+                    {
+                        if (memoryBlock != null)
+                        {
+                            memoryBlock.Slab.Free(memoryBlock);
+                        }
+                    }
+                    catch
+                    {
+                        //Suppress exception in release mode
+                        #if DEBUG
+                            throw;
+                        #endif
+                    }
+
+                }
+            }
         }
 
     }
 
+    /// <summary>
+    /// Represents a buffer pool implementation
+    /// </summary>
     public class BufferPool : IBufferPool
     {
         public const int MinimumSlabSize = 92160; //90 KB to force slab into LOH
+        private readonly IMemorySlab firstSlab;
 
         private long slabSize;
         private int initialSlabs, subsequentSlabs;
         private object sync_slabList = new object(); //synchronizes access to the array of slabs
         private object sync_newSlab = new object(); //synchronizes access to new slab creation
         private List<IMemorySlab> slabs = new List<IMemorySlab>();
-        private readonly IMemorySlab firstSlab;
         private int singleSlabPool; //-1 or 0, used for faster access if only one slab is available
 
-        public BufferPool(long SlabSize, int InitialSlabs, int SubsequentSlabs)
+        public BufferPool(long slabSize, int initialSlabs, int subsequentSlabs)
         {
 
-            if (SlabSize < 1) throw new ArgumentException("SlabSize must be equal to or greater than 1");
-            if (InitialSlabs < 1) throw new ArgumentException("InitialSlabs must be equal to or greater than 1");
-            if (SubsequentSlabs < 1) throw new ArgumentException("SubsequentSlabs must be equal to or greater than 1");
+            if (slabSize < 1) throw new ArgumentException("SlabSize must be equal to or greater than 1");
+            if (initialSlabs < 1) throw new ArgumentException("InitialSlabs must be equal to or greater than 1");
+            if (subsequentSlabs < 1) throw new ArgumentException("SubsequentSlabs must be equal to or greater than 1");
 
-            this.slabSize = SlabSize > MinimumSlabSize ? SlabSize : MinimumSlabSize;
-            this.initialSlabs = InitialSlabs;
-            this.subsequentSlabs = SubsequentSlabs;
+            this.slabSize = slabSize > MinimumSlabSize ? slabSize : MinimumSlabSize;
+            this.initialSlabs = initialSlabs;
+            this.subsequentSlabs = subsequentSlabs;
 
             lock (sync_slabList)
             {
@@ -204,7 +230,7 @@ namespace ServerToolkit.BufferManagement
                         Interlocked.Exchange(ref singleSlabPool, -1); //true
                     }
 
-                    for (int i = 0; i < initialSlabs; i++ )
+                    for (int i = 0; i < initialSlabs; i++)
                     {
                         slabs.Add(new MemorySlab(slabSize, this));
                     }
@@ -214,12 +240,35 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-        public IBuffer GetBuffer(long Length)
+
+        public int InitialSlabs
+        {
+            get { return initialSlabs; }
+        }
+
+        public int SubsequentSlabs
+        {
+            get { return subsequentSlabs; }
+        }
+
+        public long SlabSize
+        {
+            get { return slabSize; }
+        }
+
+        //Returns number of slabs
+        //Strictly for testing
+        internal long SlabCount
+        {
+            get { return slabs.Count; }
+        }
+
+        public IBuffer GetBuffer(long size)
         {
 
-            if (Length < 0) throw new ArgumentException("Length must be greater than 0");
+            if (size < 0) throw new ArgumentException("Length must be greater than 0");
 
-            if (Length == 0) return new ManagedBuffer(firstSlab.Array); //Return an empty buffer
+            if (size == 0) return new ManagedBuffer(firstSlab.Array); //Return an empty buffer
 
             IMemoryBlock allocatedBlock;
             IMemorySlab[] slabArr;
@@ -233,7 +282,7 @@ namespace ServerToolkit.BufferManagement
                 //The optimization is effective because singleSlabPool will be accurate majority of the time.
 
                 slabArr = new IMemorySlab[] { firstSlab };
-                if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+                if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
                 {
                     return new ManagedBuffer(allocatedBlock);
                 }
@@ -248,7 +297,7 @@ namespace ServerToolkit.BufferManagement
                     slabArr = slabs.ToArray();
                 }
 
-                if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+                if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
                 {
                     return new ManagedBuffer(allocatedBlock);
                 }
@@ -263,7 +312,7 @@ namespace ServerToolkit.BufferManagement
                     slabArr = slabs.ToArray();
                 }
                 
-                if (TryAllocateBlockInSlabs(Length, slabArr, out allocatedBlock))
+                if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
                 {
                     //found it -- leave
                     return new ManagedBuffer(allocatedBlock);
@@ -272,7 +321,7 @@ namespace ServerToolkit.BufferManagement
                 //Unable to find available free space, so create new slab
                 MemorySlab newSlab = new MemorySlab(slabSize, this);
 
-                newSlab.TryAllocate(Length, out allocatedBlock);
+                newSlab.TryAllocate(size, out allocatedBlock);
 
                 lock (sync_slabList)
                 {
@@ -293,26 +342,6 @@ namespace ServerToolkit.BufferManagement
 
         }
 
-
-        //Helper method that searches for free block in an array of slabs and returns the allocated block
-        private static bool TryAllocateBlockInSlabs(long Length, IMemorySlab[] Slabs, out IMemoryBlock allocatedBlock)
-        {
-            allocatedBlock = null;
-            for (int i = 0; i < Slabs.Length; i++)
-            {
-                if (Slabs[i].LargestFreeBlockSize >= Length)
-                {
-                    if (Slabs[i].TryAllocate(Length, out allocatedBlock))
-                    {                        
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-
         internal void TryFreeSlab()
         {
             lock (sync_slabList)
@@ -328,7 +357,7 @@ namespace ServerToolkit.BufferManagement
                     }
                 }
 
-                if (emptySlabsCount > 1) //There should be at least two empty slabs before one is removed
+                if (emptySlabsCount > InitialSlabs) //There should be at least 1+initial slabs empty slabs before one is removed
                 {
                     //remove the last empty one
                     slabs.RemoveAt(lastemptySlab);
@@ -339,28 +368,24 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-        //Returns number of slabs
-        //Strictly for testing
-        internal long SlabCount
+        //Helper method that searches for free block in an array of slabs and returns the allocated block
+        private static bool TryAllocateBlockInSlabs(long length, IMemorySlab[] slabs, out IMemoryBlock allocatedBlock)
         {
-            get { return slabs.Count; }
+            allocatedBlock = null;
+            for (int i = 0; i < slabs.Length; i++)
+            {
+                if (slabs[i].LargestFreeBlockSize >= length)
+                {
+                    if (slabs[i].TryAllocate(length, out allocatedBlock))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
-
-        public int InitialSlabs
-        {
-            get { return initialSlabs; }
-        }
-
-        public int SubsequentSlabs
-        {
-            get { return subsequentSlabs ; }
-        }
-
-        public long SlabSize
-        {
-            get { return slabSize; }
-        }
 
     }
 }

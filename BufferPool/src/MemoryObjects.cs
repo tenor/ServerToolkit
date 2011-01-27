@@ -16,39 +16,38 @@
 */
 #endregion
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
-
 namespace ServerToolkit.BufferManagement
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Threading;
+
+    /// <summary>
+    /// Represents a defined block in memory
+    /// </summary>
     internal class MemoryBlock : IMemoryBlock
     {
-
         readonly long startLoc, endLoc, length;
         readonly IMemorySlab owner;
 
-        internal MemoryBlock(long StartLocation, long Length, IMemorySlab Slab)
+        internal MemoryBlock(long startLocation, long length, IMemorySlab slab)
         {
-            if (StartLocation < 0)
+            if (startLocation < 0)
             {
-                throw new ArgumentOutOfRangeException("StartLocation", "StartLocation must be greater than 0");
-            }
-            startLoc = StartLocation;
-
-            if (Length <= 0)
-            {
-                throw new ArgumentOutOfRangeException("Length", "Length must be greater than 0");
+                throw new ArgumentOutOfRangeException("startLocation", "StartLocation must be greater than 0");
             }
 
-            if ((StartLocation + Length - 1) < startLoc)
+            startLoc = startLocation;
+
+            if (length <= 0)
             {
-                throw new ArgumentOutOfRangeException("EndLocation", "EndLocation must be equal or greater than StartLocation");
+                throw new ArgumentOutOfRangeException("length", "Length must be greater than 0");
             }
-            endLoc = StartLocation + Length - 1;
-            length = Length;
-            if (Slab == null) throw new ArgumentNullException("Slab");
-            this.owner = Slab;
+
+            endLoc = startLocation + length - 1;
+            this.length = length;
+            if (slab == null) throw new ArgumentNullException("slab");
+            this.owner = slab;
         }
 
 
@@ -80,28 +79,33 @@ namespace ServerToolkit.BufferManagement
 
     }
 
+    /// <summary>
+    /// Represents a large memory block where smaller memory blocks can be allocated
+    /// </summary>
     internal class MemorySlab : IMemorySlab
     {
+        protected readonly bool is64BitMachine;
+        protected readonly long slabSize;
+        protected readonly BufferPool pool;
+
         protected Dictionary<long, IMemoryBlock> dictStartLoc = new Dictionary<long, IMemoryBlock>();
         protected Dictionary<long, IMemoryBlock> dictEndLoc = new Dictionary<long, IMemoryBlock>();
         protected SortedDictionary<long, SortedDictionary<long, IMemoryBlock>> freeBlocksList = new SortedDictionary<long, SortedDictionary<long, IMemoryBlock>>();
         protected object sync = new object();
 
-        protected readonly bool is64BitMachine;
-        protected readonly long slabSize;
-        protected readonly BufferPool pool;
         protected long largest = 0;
         protected byte[] array;
 
 
-        internal MemorySlab(long Size, BufferPool Pool)
+        internal MemorySlab(long size, BufferPool pool)
         {
 
-            if (Size < 1)
+            if (size < 1)
             {
                 //Can't have zero length or -ve slabs
                 throw new ArgumentOutOfRangeException("Size");
             }
+
             //Pool parameter is allowed to be null for testing purposes
 
             if (System.IntPtr.Size > 4)
@@ -118,11 +122,11 @@ namespace ServerToolkit.BufferManagement
                 IMemoryBlock first;
                 if (!dictStartLoc.TryGetValue(0, out first))
                 {
-                    AddFreeBlock(0, Size);
-                    this.slabSize = Size;
-                    this.pool = Pool;
+                    AddFreeBlock(0, size);
+                    this.slabSize = size;
+                    this.pool = pool;
                     // GC.Collect(); //Perform Garbage Collection before creating large array -- may be useful
-                    array = new byte[Size];
+                    array = new byte[size];
                 }
             }
         }
@@ -148,43 +152,17 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-        protected long GetLargest()
+        public virtual bool TryAllocate(long length, out IMemoryBlock allocatedBlock)
         {
-            if (is64BitMachine)
-            {
-                return largest;
-            }
-            else
-            {
-                return Interlocked.Read(ref largest);
-            }
-        }
-
-        protected void SetLargest(long Value)
-        {
-            if (is64BitMachine)
-            {
-                //largest = Value;
-                Interlocked.Exchange(ref largest, Value);
-            }
-            else
-            {
-                Interlocked.Exchange(ref largest, Value);
-            }
-
-        }
-
-        public virtual bool TryAllocate(long Length, out IMemoryBlock AllocatedBlock)
-        {
-            AllocatedBlock = null;
+            allocatedBlock = null;
             lock (sync)
             {
-                if (GetLargest() < Length) return false;
+                if (GetLargest() < length) return false;
 
                 //search freeBlocksList looking for the smallest available free block
                 long[] keys = new long[freeBlocksList.Count];
                 freeBlocksList.Keys.CopyTo(keys, 0);
-                int index = System.Array.BinarySearch<long>(keys, Length);
+                int index = System.Array.BinarySearch<long>(keys, length);
                 if (index < 0)
                 {
                     index = ~index;
@@ -197,7 +175,7 @@ namespace ServerToolkit.BufferManagement
                 //Grab the first memoryblock in the freeBlockList innerSortedDictionary
                 //There is guanranteed to be an innerSortedDictionary with at least 1 key=value pair
                 IMemoryBlock foundBlock = null;
-                foreach (KeyValuePair<long,IMemoryBlock> kvPair in freeBlocksList[keys[index]])
+                foreach (KeyValuePair<long, IMemoryBlock> kvPair in freeBlocksList[keys[index]])
                 {
                     foundBlock = kvPair.Value;
                     break;
@@ -207,19 +185,19 @@ namespace ServerToolkit.BufferManagement
                 RemoveFreeBlock(foundBlock);
 
 
-                if (foundBlock.Length == Length)
+                if (foundBlock.Length == length)
                 {
                     //Perfect match
-                    AllocatedBlock = foundBlock;
+                    allocatedBlock = foundBlock;
                 }
                 else
                 {
                     //FoundBlock is larger than requested block size
 
-                    AllocatedBlock = new MemoryBlock(foundBlock.StartLocation, Length, this);
+                    allocatedBlock = new MemoryBlock(foundBlock.StartLocation, length, this);
 
-                    long newFreeStartLocation = AllocatedBlock.EndLocation + 1;
-                    long newFreeSize = foundBlock.Length - Length;
+                    long newFreeStartLocation = allocatedBlock.EndLocation + 1;
+                    long newFreeSize = foundBlock.Length - length;
 
                     //add new Freeblock with the smaller remaining space
                     AddFreeBlock(newFreeStartLocation, newFreeSize);
@@ -233,57 +211,9 @@ namespace ServerToolkit.BufferManagement
 
         }
 
-        protected void AddFreeBlock(long StartLocation, long Length)
-        {
-            SortedDictionary<long, IMemoryBlock> innerList;
-            if (!freeBlocksList.TryGetValue(StartLocation, out innerList))
-            {
-                innerList = new SortedDictionary<long, IMemoryBlock>();
-                freeBlocksList.Add(Length, innerList);
-            }
-
-            MemoryBlock newFreeBlock = new MemoryBlock(StartLocation, Length, this);
-            innerList.Add(StartLocation, newFreeBlock);
-            dictStartLoc.Add(StartLocation, newFreeBlock);
-            dictEndLoc.Add(StartLocation + Length - 1, newFreeBlock);
-            if (GetLargest() < Length)
-            {
-                SetLargest(Length);
-            }
-        }
-
-        protected void RemoveFreeBlock(IMemoryBlock Block)
-        {
-            dictStartLoc.Remove(Block.StartLocation);
-            dictEndLoc.Remove(Block.EndLocation);
-            if (freeBlocksList[Block.Length].Count == 1)
-            {
-                freeBlocksList.Remove(Block.Length);
-                if (GetLargest() == Block.Length)
-                {
-                    //Get the true largest
-                    if (freeBlocksList.Count == 0)
-                    {
-                        SetLargest(0);
-                    }
-                    else
-                    {
-                        long[] indices = new long[freeBlocksList.Count];
-                        freeBlocksList.Keys.CopyTo(indices, 0);
-                        SetLargest(indices[indices.LongLength - 1]);
-                    }
-                }
-            }
-            else
-            {
-                freeBlocksList[Block.Length].Remove(Block.StartLocation);
-            }
-        }
-
-
         //This method does not detect if the allocatedBlock is indeed from this slab.
         //Callers should make sure that the allocatedblock belongs to the right slab.
-        public virtual void Free(IMemoryBlock AllocatedBlock)
+        public virtual void Free(IMemoryBlock allocatedBlock)
         {
             lock (sync)
             {
@@ -292,13 +222,13 @@ namespace ServerToolkit.BufferManagement
                 long? newFreeStartLocation = null;
                 long newFreeSize = 0;
 
-                if (AllocatedBlock.StartLocation > 0)
+                if (allocatedBlock.StartLocation > 0)
                 {
 
                     //Check if block before this one is free
 
                     IMemoryBlock blockBefore;
-                    if (dictEndLoc.TryGetValue(AllocatedBlock.StartLocation - 1, out blockBefore))
+                    if (dictEndLoc.TryGetValue(allocatedBlock.StartLocation - 1, out blockBefore))
                     {
                         //Yup, so delete it
                         newFreeStartLocation = blockBefore.StartLocation;
@@ -309,14 +239,14 @@ namespace ServerToolkit.BufferManagement
                 }
 
                 //Include  AllocatedBlock
-                if (!newFreeStartLocation.HasValue) newFreeStartLocation = AllocatedBlock.StartLocation;
-                newFreeSize += AllocatedBlock.Length;
+                if (!newFreeStartLocation.HasValue) newFreeStartLocation = allocatedBlock.StartLocation;
+                newFreeSize += allocatedBlock.Length;
 
-                if (AllocatedBlock.EndLocation + 1 < Size)
+                if (allocatedBlock.EndLocation + 1 < Size)
                 {
                     // Check if block next to (below) this one is free
                     IMemoryBlock blockAfter;
-                    if (dictStartLoc.TryGetValue(AllocatedBlock.EndLocation + 1, out blockAfter))
+                    if (dictStartLoc.TryGetValue(allocatedBlock.EndLocation + 1, out blockAfter))
                     {
                         //Yup, delete it
                         newFreeSize += blockAfter.Length;
@@ -339,5 +269,79 @@ namespace ServerToolkit.BufferManagement
             }
 
         }
+
+        protected void SetLargest(long value)
+        {
+            if (is64BitMachine)
+            {
+                //largest = Value;
+                Interlocked.Exchange(ref largest, value);
+            }
+            else
+            {
+                Interlocked.Exchange(ref largest, value);
+            }
+
+        }
+
+        protected void AddFreeBlock(long startLocation, long length)
+        {
+            SortedDictionary<long, IMemoryBlock> innerList;
+            if (!freeBlocksList.TryGetValue(startLocation, out innerList))
+            {
+                innerList = new SortedDictionary<long, IMemoryBlock>();
+                freeBlocksList.Add(length, innerList);
+            }
+
+            MemoryBlock newFreeBlock = new MemoryBlock(startLocation, length, this);
+            innerList.Add(startLocation, newFreeBlock);
+            dictStartLoc.Add(startLocation, newFreeBlock);
+            dictEndLoc.Add(startLocation + length - 1, newFreeBlock);
+            if (GetLargest() < length)
+            {
+                SetLargest(length);
+            }
+        }
+
+        protected void RemoveFreeBlock(IMemoryBlock block)
+        {
+            dictStartLoc.Remove(block.StartLocation);
+            dictEndLoc.Remove(block.EndLocation);
+            if (freeBlocksList[block.Length].Count == 1)
+            {
+                freeBlocksList.Remove(block.Length);
+                if (GetLargest() == block.Length)
+                {
+                    //Get the true largest
+                    if (freeBlocksList.Count == 0)
+                    {
+                        SetLargest(0);
+                    }
+                    else
+                    {
+                        long[] indices = new long[freeBlocksList.Count];
+                        freeBlocksList.Keys.CopyTo(indices, 0);
+                        SetLargest(indices[indices.LongLength - 1]);
+                    }
+                }
+            }
+            else
+            {
+                freeBlocksList[block.Length].Remove(block.StartLocation);
+            }
+        }
+
+        protected long GetLargest()
+        {
+            if (is64BitMachine)
+            {
+                return largest;
+            }
+            else
+            {
+                return Interlocked.Read(ref largest);
+            }
+        }
+
     }
 }

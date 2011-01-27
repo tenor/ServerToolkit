@@ -122,16 +122,16 @@ namespace ServerToolkit.BufferManagement.Tests
         private static void AssertIsContiguous(List<IBuffer> bufferList)
         {
 
-            var orderedGroups = bufferList.GroupBy(o => o.GetArraySegments()[0].Array);
+            var orderedGroups = bufferList.GroupBy(o => o.GetSegments()[0].Array);
 
             foreach (var grp in orderedGroups)
             {
-                var orderedList = grp.OrderBy(o => o.GetArraySegments()[0].Offset).ToList();
-                Assert.AreEqual(orderedList[0].GetArraySegments()[0].Offset, 0);
+                var orderedList = grp.OrderBy(o => o.GetSegments()[0].Offset).ToList();
+                Assert.AreEqual(orderedList[0].GetSegments()[0].Offset, 0);
                 for (int i = 1; i < orderedList.Count; i++)
                 {
                     Assert.IsTrue(
-                        orderedList[i].GetArraySegments()[0].Offset == orderedList[i - 1].GetArraySegments()[0].Offset + orderedList[i - 1].GetArraySegments()[0].Count
+                        orderedList[i].GetSegments()[0].Offset == orderedList[i - 1].GetSegments()[0].Offset + orderedList[i - 1].GetSegments()[0].Count
                         );
                 }
             }

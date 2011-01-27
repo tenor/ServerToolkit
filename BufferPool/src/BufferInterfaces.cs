@@ -16,30 +16,31 @@
 */
 #endregion
 
-using System;
-using System.Collections.Generic;
-
 namespace ServerToolkit.BufferManagement
 {
+    using System;
+    using System.Collections.Generic;
+
     public interface IBuffer : IDisposable
     {
-        IList<ArraySegment<byte>> GetArraySegments();
-        IList<ArraySegment<byte>> GetArraySegments(long Length);
-        IList<ArraySegment<byte>> GetArraySegments(long Offset, long Length);
-        void CopyTo(byte[] DestinationArray);
-        void CopyTo(byte[] DestinationArray, long DestinationIndex, long Length);
-        void CopyFrom(byte[] SourceArray);
-        void CopyFrom(byte[] SourceArray, long SourceIndex, long Length);
         long Size { get; }
         bool IsDisposed { get; }
+        int SegmentCount { get; }
+        IList<ArraySegment<byte>> GetSegments();
+        IList<ArraySegment<byte>> GetSegments(long length);
+        IList<ArraySegment<byte>> GetSegments(long offset, long length);
+        void CopyTo(byte[] destinationArray);
+        void CopyTo(byte[] destinationArray, long destinationIndex, long length);
+        void CopyFrom(byte[] sourceArray);
+        void CopyFrom(byte[] sourceArray, long sourceIndex, long length);
     }
 
     public interface IBufferPool
     {
-        IBuffer GetBuffer(long Size);
         int InitialSlabs { get; }
         int SubsequentSlabs { get; }
         long SlabSize { get; }
+        IBuffer GetBuffer(long size);
 
     }
 }

@@ -130,7 +130,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 byte[] SourceArray = GetRandomizedByteArray(blockSize);
                 target.CopyFrom(SourceArray);
                 byte[] copyOfDestination = new byte[blockSize];
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
 
                 //Source Array is smaller than ManagedBuffer Size
@@ -138,7 +138,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 SourceArray = GetRandomizedByteArray(blockSizeLess);
                 target.CopyFrom(SourceArray);
                 copyOfDestination = new byte[blockSizeLess];
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
 
             }
@@ -152,7 +152,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 byte[] SourceArray = GetRandomizedByteArray(blockSize);
                 target.CopyFrom(SourceArray);
                 byte[] copyOfDestination = new byte[blockSize];
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
 
                 //Source Array is smaller than ManagedBuffer Size
@@ -160,7 +160,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 SourceArray = GetRandomizedByteArray(blockSizeLess);
                 target.CopyFrom(SourceArray);
                 copyOfDestination = new byte[blockSizeLess];
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
 
             }
@@ -205,7 +205,7 @@ namespace ServerToolkit.BufferManagement.Tests
             target.CopyFrom(SourceArray,1,blockSize - 2);
             byte[] copyOfDestination = new byte[blockSize - 2];
             byte[] copyOfSource = new byte[blockSize - 2];
-            Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
+            Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
             Array.Copy(SourceArray, 1, copyOfSource, 0, copyOfSource.LongLength);
             Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
@@ -230,7 +230,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 byte[] copyOfSource = new byte[blockSize];
                 byte[] copyOfDestination = new byte[blockSize];
                 Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
                 Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
                 //Destination Array is larger than ManagedBuffer Size
@@ -240,7 +240,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 copyOfSource = new byte[blockSize];
                 copyOfDestination = new byte[blockSize];
                 Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
                 Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
             }
@@ -257,7 +257,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 byte[] copyOfSource = new byte[blockSize];
                 byte[] copyOfDestination = new byte[blockSize];
                 Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
                 Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
                 //Destination Array is larger than ManagedBuffer Size
@@ -267,7 +267,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 copyOfSource = new byte[blockSize];
                 copyOfDestination = new byte[blockSize];
                 Array.Copy(DestArray, 0, copyOfDestination, 0, copyOfDestination.LongLength);
-                Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
+                Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
                 Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
             }
@@ -312,7 +312,7 @@ namespace ServerToolkit.BufferManagement.Tests
             byte[] copyOfSource = new byte[blockSize - 2];
             byte[] copyOfDestination = new byte[blockSize - 2];
             Array.Copy(DestArray, 1, copyOfDestination, 0, copyOfDestination.LongLength);
-            Array.Copy(target.GetArraySegments()[0].Array, target.GetArraySegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
+            Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfSource, 0, copyOfSource.LongLength);
             Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
         }
@@ -330,7 +330,7 @@ namespace ServerToolkit.BufferManagement.Tests
             ManagedBuffer target = GetNewBuffer(slab);
             target.Dispose();
 
-            //Call Dispose again, should cause any exceptions to be thrown
+            //Call Dispose again, shouldn't cause any exceptions to be thrown
             target.Dispose();
 
             //Try to work with disposed object. should throw exceptions
@@ -369,7 +369,7 @@ namespace ServerToolkit.BufferManagement.Tests
 
                 try
                 {
-                    target.GetArraySegments();
+                    target.GetSegments();
                 }
                 catch (ObjectDisposedException)
                 {
@@ -394,7 +394,7 @@ namespace ServerToolkit.BufferManagement.Tests
             int Offset = 0;
             int Length = (int)(blockSize - 1);
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Offset, Length)[0];
+            actual = target.GetSegments(Offset, Length)[0];
             Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array);
@@ -402,7 +402,7 @@ namespace ServerToolkit.BufferManagement.Tests
             //Test for full blocksize
             Offset = 0;
             Length = (int)blockSize;
-            actual = target.GetArraySegments(Offset, Length)[0];
+            actual = target.GetSegments(Offset, Length)[0];
             Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
@@ -411,7 +411,7 @@ namespace ServerToolkit.BufferManagement.Tests
             //Test for offset of 1
             Offset = 1;
             Length = (int)(blockSize - 1);
-            actual = target.GetArraySegments(Offset, Length)[0];
+            actual = target.GetSegments(Offset, Length)[0];
             Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
@@ -432,7 +432,7 @@ namespace ServerToolkit.BufferManagement.Tests
             int Offset = 0;
             int Length = 0;
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Offset, Length)[0];
+            actual = target.GetSegments(Offset, Length)[0];
             Assert.AreEqual<long>(actual.Offset, Offset + target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
@@ -453,7 +453,7 @@ namespace ServerToolkit.BufferManagement.Tests
             int Offset = -1;
             int Length = 0;
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Offset, Length)[0];
+            actual = target.GetSegments(Offset, Length)[0];
         }
 
         [TestMethod()]
@@ -466,7 +466,7 @@ namespace ServerToolkit.BufferManagement.Tests
             int Offset = 0;
             int Length = -1;
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Offset, Length)[0];
+            actual = target.GetSegments(Offset, Length)[0];
         }
 
         /// <summary>
@@ -480,14 +480,14 @@ namespace ServerToolkit.BufferManagement.Tests
             ManagedBuffer target = GetNewBuffer(slab);
             int Length = (int)(blockSize - 1);
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Length)[0];
+            actual = target.GetSegments(Length)[0];
             Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
 
             //Test again for full blocksize
             Length = (int)(blockSize - 1);
-            actual = target.GetArraySegments(Length)[0];
+            actual = target.GetSegments(Length)[0];
             Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
@@ -506,7 +506,7 @@ namespace ServerToolkit.BufferManagement.Tests
             ManagedBuffer target = GetNewBuffer(slab);
             int Length = 0;
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Length)[0];
+            actual = target.GetSegments(Length)[0];
             Assert.AreEqual<long>(actual.Offset, 0 + target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array); 
@@ -523,7 +523,7 @@ namespace ServerToolkit.BufferManagement.Tests
             ManagedBuffer target = GetNewBuffer(slab);
             int Length = -1;
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments(Length)[0];
+            actual = target.GetSegments(Length)[0];
         }
 
 
@@ -537,7 +537,7 @@ namespace ServerToolkit.BufferManagement.Tests
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
             ArraySegment<byte> actual;
-            actual = target.GetArraySegments()[0];
+            actual = target.GetSegments()[0];
             Assert.AreEqual<long>(actual.Offset, target.memoryBlock.StartLocation);
             Assert.AreEqual<long>(actual.Count, Math.Min(target.Size, int.MaxValue ));
             Assert.AreEqual<byte[]>(actual.Array, target.memoryBlock.Slab.Array);
