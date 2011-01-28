@@ -23,7 +23,7 @@ namespace ServerToolkit.BufferManagement
     using System.Threading;
 
     /// <summary>
-    /// Represents an allocated buffer that is managed within a buffer pool.
+    /// Represents an efficiently allocated buffer for asynchronous read/write operations.
     /// </summary>
     public class ManagedBuffer : IBuffer
     {
@@ -32,6 +32,10 @@ namespace ServerToolkit.BufferManagement
         protected bool disposed = false;
         byte[] slabArray;
 
+        /// <summary>
+        /// Initializes a new instance of the ManagedBuffer class, specifying the memory block that the ManagedBuffer reads and writes to.
+        /// </summary>
+        /// <param name="allocatedMemoryBlock">Underlying allocated memory block</param>
         internal ManagedBuffer(IMemoryBlock allocatedMemoryBlock)
         {
             if (allocatedMemoryBlock == null) throw new ArgumentNullException("AllocatedMemoryBlock");
@@ -40,33 +44,52 @@ namespace ServerToolkit.BufferManagement
         }
 
 
-        //Used for Creating an empty (zero-length) buffer
-        internal ManagedBuffer(byte[] slabArray)
+        /// <summary>
+        /// Initializes a new instance of the ManagedBuffer class, specifying the slab to be associated with the ManagedBuffer.
+        /// This constructor creates an empty (zero-length) buffer.
+        /// </summary>
+        /// <param name="slab">The Memory Slab to be associated with the ManagedBuffer</param>
+        internal ManagedBuffer(IMemorySlab slab)
         {
-            if (slabArray == null) throw new ArgumentNullException("SlabArray");
+            if (slab == null) throw new ArgumentNullException("SlabArray");
             memoryBlock = null;
-            this.slabArray = slabArray;
+            this.slabArray = slab.Array;
         }
 
 
+        /// <summary>
+        /// Gets a value indicating whether the buffer is disposed.
+        /// </summary>
         public bool IsDisposed
         {
             get { return disposed; }
         }
 
+        /// <summary>
+        /// Gets the total size of the buffer, in bytes.
+        /// </summary>        
         public long Size
         {
             get { return memoryBlock == null ? 0 : memoryBlock.Length; }
         }
 
+        /// <summary>
+        /// Gets the number of segments in the buffer.
+        /// </summary>
         public int SegmentCount
         {
+            //TODO: MULTI_ARRAY_SEGMENTS: Fix this
             get { return 1; /*Always 1 for now */ }
         }
 
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
         //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This method should be able to accept length > int.MaxValue after implementing multi-array-segments
+
+        /// <summary>
+        /// Gets buffer segments that can be passed on to an asynchronous socket operation.
+        /// </summary>
+        /// <returns>A list of ArraySegments(of Byte) containing buffer segments.</returns>
         public virtual IList<ArraySegment<byte>> GetSegments()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
@@ -83,12 +106,23 @@ namespace ServerToolkit.BufferManagement
             
         }
 
+        /// <summary>
+        /// Gets buffer segments that can be passed on to an asynchronous socket operation.
+        /// </summary>
+        /// <param name="length">Total length of segments.</param>
+        /// <returns>A list of ArraySegments(of Byte) containing buffer segments.</returns>
         public virtual IList<ArraySegment<byte>> GetSegments(long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             return GetSegments(0, length);
         }
 
+        /// <summary>
+        /// Gets buffer segments that can be passed on to an asynchronous socket operation.
+        /// </summary>
+        /// <param name="offset">Offset in the buffer where segments start.</param>
+        /// <param name="length">Total length of segments.</param>
+        /// <returns>A list of ArraySegments(of Byte) containing buffer segments.</returns>
         public IList<ArraySegment<byte>> GetSegments(long offset, long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
@@ -122,7 +156,11 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-
+        /// <summary>
+        /// Copies data from the buffer to a byte array.
+        /// </summary>
+        /// <param name="destinationArray">The one-dimensional byte array which receives the data.</param>
+        /// <remarks>The size of the buffer must be less than or equal to the destinationArray length.</remarks>
         public void CopyTo(byte[] destinationArray)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
@@ -130,6 +168,12 @@ namespace ServerToolkit.BufferManagement
             CopyTo(destinationArray, 0, this.Size);
         }
 
+        /// <summary>
+        /// Copies data from the buffer to a byte array
+        /// </summary>
+        /// <param name="destinationArray">The one-dimensional byte array which receives the data.</param>
+        /// <param name="destinationIndex">The index in the destinationArray at which storing begins.</param>
+        /// <param name="length">The number of bytes to copy.</param>
         public void CopyTo(byte[] destinationArray, long destinationIndex, long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
@@ -140,6 +184,11 @@ namespace ServerToolkit.BufferManagement
             Array.Copy(memoryBlock.Slab.Array, memoryBlock.StartLocation, destinationArray, destinationIndex, length);
         }
 
+        /// <summary>
+        /// Copies data from a byte array into the buffer.
+        /// </summary>
+        /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
+        /// <remarks>The length of the sourceArray must be less than or equal to the buffer size.</remarks>
         public void CopyFrom(byte[] sourceArray)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
@@ -147,6 +196,12 @@ namespace ServerToolkit.BufferManagement
             CopyFrom(sourceArray, 0, sourceArray.Length);
         }
 
+        /// <summary>
+        /// Copies data from a byte array into the buffer.
+        /// </summary>
+        /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
+        /// <param name="sourceIndex">The index in the sourceArray at which copying begins.</param>
+        /// <param name="length">The number of bytes to copy.</param>
         public void CopyFrom(byte[] sourceArray, long sourceIndex, long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
@@ -157,11 +212,19 @@ namespace ServerToolkit.BufferManagement
             Array.Copy(sourceArray, sourceIndex, memoryBlock.Slab.Array, memoryBlock.StartLocation, length);
         }
 
+        /// <summary>
+        /// Releases resources used by the buffer.
+        /// </summary>
+        /// <remarks>This method frees the memory blocks used by the buffer.</remarks>
         public void Dispose()
         {
             Dispose(true);
         }
 
+        /// <summary>
+        /// Releases resources used by the buffer.
+        /// </summary>
+        /// <param name="disposing">True, to indicate you want to release all resources. False to release only native resources.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (disposing)
@@ -192,7 +255,7 @@ namespace ServerToolkit.BufferManagement
     }
 
     /// <summary>
-    /// Represents a buffer pool implementation
+    /// Provides a pool of buffers that can be used to efficiently allocate memory for asynchronous socket operations
     /// </summary>
     public class BufferPool : IBufferPool
     {
@@ -206,6 +269,12 @@ namespace ServerToolkit.BufferManagement
         private List<IMemorySlab> slabs = new List<IMemorySlab>();
         private int singleSlabPool; //-1 or 0, used for faster access if only one slab is available
 
+        /// <summary>
+        /// Initializes a new instance of the BufferPool class
+        /// </summary>
+        /// <param name="slabSize">Length, in bytes, of a slab in the BufferPool</param>
+        /// <param name="initialSlabs">Number of slabs to create initially</param>
+        /// <param name="subsequentSlabs">Number of additional slabs to create at a time</param>
         public BufferPool(long slabSize, int initialSlabs, int subsequentSlabs)
         {
 
@@ -240,35 +309,50 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-
+        /// <summary>
+        /// Gets the initial number of slabs created
+        /// </summary>
         public int InitialSlabs
         {
             get { return initialSlabs; }
         }
 
+        /// <summary>
+        /// Gets the additional number of slabs to be created at a time
+        /// </summary>
         public int SubsequentSlabs
         {
             get { return subsequentSlabs; }
         }
 
+        /// <summary>
+        /// Gets the slab size, in bytes
+        /// </summary>
         public long SlabSize
         {
             get { return slabSize; }
         }
 
-        //Returns number of slabs
-        //Strictly for testing
+        /// <summary>
+        /// Gets the number of slabs in the buffer pool
+        /// </summary>
+        /// <remarks>This property is provided for testing purposes</remarks>
         internal long SlabCount
         {
             get { return slabs.Count; }
         }
 
+        /// <summary>
+        /// Creates a buffer of the specified size
+        /// </summary>
+        /// <param name="size">Buffer size, in bytes</param>
+        /// <returns>IBuffer object of requested size</returns>        
         public IBuffer GetBuffer(long size)
         {
 
             if (size < 0) throw new ArgumentException("Length must be greater than 0");
 
-            if (size == 0) return new ManagedBuffer(firstSlab.Array); //Return an empty buffer
+            if (size == 0) return new ManagedBuffer(firstSlab); //Return an empty buffer
 
             IMemoryBlock allocatedBlock;
             IMemorySlab[] slabArr;
@@ -342,6 +426,9 @@ namespace ServerToolkit.BufferManagement
 
         }
 
+        /// <summary>
+        /// Searches for empty slabs and frees one if there are more than InitialSlabs number of slabs.
+        /// </summary>
         internal void TryFreeSlab()
         {
             lock (sync_slabList)
@@ -368,7 +455,13 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-        //Helper method that searches for free block in an array of slabs and returns the allocated block
+        /// <summary>
+        /// Helper method that searches for free block in an array of slabs and returns the allocated block
+        /// </summary>
+        /// <param name="length">Requested length of memory block</param>
+        /// <param name="slabs">Array of slabs to search</param>
+        /// <param name="allocatedBlock">Allocated memory block</param>
+        /// <returns>True if memory block was successfully allocated. False, if otherwise</returns>
         private static bool TryAllocateBlockInSlabs(long length, IMemorySlab[] slabs, out IMemoryBlock allocatedBlock)
         {
             allocatedBlock = null;

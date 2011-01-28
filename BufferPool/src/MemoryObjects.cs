@@ -30,6 +30,12 @@ namespace ServerToolkit.BufferManagement
         readonly long startLoc, endLoc, length;
         readonly IMemorySlab owner;
 
+        /// <summary>
+        /// Initializes a new instance of the MemoryBlock class
+        /// </summary>
+        /// <param name="startLocation">Offset where memory block starts in slab</param>
+        /// <param name="length">Length of memory block</param>
+        /// <param name="slab">Slab to be associated with the memory block</param>
         internal MemoryBlock(long startLocation, long length, IMemorySlab slab)
         {
             if (startLocation < 0)
@@ -50,7 +56,9 @@ namespace ServerToolkit.BufferManagement
             this.owner = slab;
         }
 
-
+        /// <summary>
+        /// Gets the offset in the slab where the memory block begins.
+        /// </summary>
         public virtual long StartLocation
         {
             get
@@ -59,6 +67,10 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Gets the offset in the slab where the memory block ends.
+        /// </summary>
+        /// <remarks> EndLocation = StartLocation + Length - 1</remarks>
         public virtual long EndLocation
         {
             get
@@ -67,11 +79,18 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Gets the length of the memory block, in bytes.
+        /// </summary>
+        /// <remarks> Length = EndLocation - StartLocation + 1</remarks>
         public virtual long Length
         {
             get { return length; }
         }
 
+        /// <summary>
+        /// Gets the containing slab
+        /// </summary>
         public virtual IMemorySlab Slab
         {
             get { return owner; }
@@ -80,7 +99,7 @@ namespace ServerToolkit.BufferManagement
     }
 
     /// <summary>
-    /// Represents a large memory block where smaller memory blocks can be allocated
+    /// Represents a large fixed-length memory block where smaller variable-length memory blocks are dynamically allocated
     /// </summary>
     internal class MemorySlab : IMemorySlab
     {
@@ -96,7 +115,11 @@ namespace ServerToolkit.BufferManagement
         protected long largest = 0;
         protected byte[] array;
 
-
+        /// <summary>
+        /// Initializes a new instance of the MemorySlab class
+        /// </summary>
+        /// <param name="size">Size, in bytes, of slab</param>
+        /// <param name="pool">BufferPool associated with the slab</param>
         internal MemorySlab(long size, BufferPool pool)
         {
 
@@ -131,11 +154,17 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Gets the last known largest unallocated contiguous block size.
+        /// </summary>
         public long LargestFreeBlockSize
         {
             get { return GetLargest(); }
         }
 
+        /// <summary>
+        /// Gets the size, in bytes, of the memory slab.
+        /// </summary>
         public long Size
         {
             get
@@ -144,6 +173,9 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Gets the underlying byte array that is wrapped by the memory slab
+        /// </summary>
         public byte[] Array
         {
             get
@@ -152,6 +184,12 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Attempts to allocate a memory block of a specified length.
+        /// </summary>
+        /// <param name="length">Length, in bytes, of memory block</param>
+        /// <param name="allocatedBlock">Allocated memory block</param>
+        /// <returns>True, if memory block was allocated. False, if otherwise</returns>
         public virtual bool TryAllocate(long length, out IMemoryBlock allocatedBlock)
         {
             allocatedBlock = null;
@@ -211,8 +249,11 @@ namespace ServerToolkit.BufferManagement
 
         }
 
-        //This method does not detect if the allocatedBlock is indeed from this slab.
-        //Callers should make sure that the allocatedblock belongs to the right slab.
+        /// <summary>
+        /// Frees an allocated memory block.
+        /// </summary>
+        /// <param name="allocatedBlock">Allocated memory block to be freed</param>
+        /// <remarks>This method does not detect if the allocatedBlock is indeed from this slab. Callers should make sure that the allocatedblock belongs to the right slab.</remarks>
         public virtual void Free(IMemoryBlock allocatedBlock)
         {
             lock (sync)
@@ -270,6 +311,10 @@ namespace ServerToolkit.BufferManagement
 
         }
 
+        /// <summary>
+        /// Sets a new value as the largest unallocated contiguous block size
+        /// </summary>
+        /// <param name="value">Integral value of new largest unallocated block size</param>
         protected void SetLargest(long value)
         {
             if (is64BitMachine)
@@ -284,6 +329,11 @@ namespace ServerToolkit.BufferManagement
 
         }
 
+        /// <summary>
+        /// Marks an allocated block as unallocated
+        /// </summary>
+        /// <param name="startLocation">Offset of block in slab</param>
+        /// <param name="length">Length of block</param>
         protected void AddFreeBlock(long startLocation, long length)
         {
             SortedDictionary<long, IMemoryBlock> innerList;
@@ -303,6 +353,10 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Marks an unallocated contiguous block as allocated
+        /// </summary>
+        /// <param name="block">newly allocated block</param>
         protected void RemoveFreeBlock(IMemoryBlock block)
         {
             dictStartLoc.Remove(block.StartLocation);
@@ -331,6 +385,10 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
+        /// <summary>
+        /// Gets the largest unallocated contiguous block size in the slab
+        /// </summary>
+        /// <returns>The size of the largest free contiguous block</returns>
         protected long GetLargest()
         {
             if (is64BitMachine)
