@@ -337,7 +337,7 @@ namespace ServerToolkit.BufferManagement
         protected void AddFreeBlock(long startLocation, long length)
         {
             SortedDictionary<long, IMemoryBlock> innerList;
-            if (!freeBlocksList.TryGetValue(startLocation, out innerList))
+            if (!freeBlocksList.TryGetValue(length, out innerList))
             {
                 innerList = new SortedDictionary<long, IMemoryBlock>();
                 freeBlocksList.Add(length, innerList);
