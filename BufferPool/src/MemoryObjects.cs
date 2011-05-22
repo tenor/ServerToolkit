@@ -126,10 +126,10 @@ namespace ServerToolkit.BufferManagement
             if (size < 1)
             {
                 //Can't have zero length or -ve slabs
-                throw new ArgumentOutOfRangeException("Size");
+                throw new ArgumentOutOfRangeException("size");
             }
 
-            //Pool parameter is allowed to be null for testing purposes
+            //NOTE: Pool parameter is allowed to be null for testing purposes
 
             if (System.IntPtr.Size > 4)
             {
@@ -213,9 +213,9 @@ namespace ServerToolkit.BufferManagement
                 //Grab the first memoryblock in the freeBlockList innerSortedDictionary
                 //There is guanranteed to be an innerSortedDictionary with at least 1 key=value pair
                 IMemoryBlock foundBlock = null;
-                foreach (KeyValuePair<long, IMemoryBlock> kvPair in freeBlocksList[keys[index]])
+                foreach (KeyValuePair<long, IMemoryBlock> pair in freeBlocksList[keys[index]])
                 {
-                    foundBlock = kvPair.Value;
+                    foundBlock = pair.Value;
                     break;
                 }
 

@@ -27,10 +27,10 @@ namespace ServerToolkit.BufferManagement
     /// </summary>
     public class ManagedBuffer : IBuffer
     {
-
-        internal IMemoryBlock memoryBlock;
         protected bool disposed = false;
-        byte[] slabArray;
+
+        readonly IMemoryBlock memoryBlock;
+        readonly byte[] slabArray;
 
         /// <summary>
         /// Initializes a new instance of the ManagedBuffer class, specifying the memory block that the ManagedBuffer reads and writes to.
@@ -38,7 +38,7 @@ namespace ServerToolkit.BufferManagement
         /// <param name="allocatedMemoryBlock">Underlying allocated memory block</param>
         internal ManagedBuffer(IMemoryBlock allocatedMemoryBlock)
         {
-            if (allocatedMemoryBlock == null) throw new ArgumentNullException("AllocatedMemoryBlock");
+            if (allocatedMemoryBlock == null) throw new ArgumentNullException("allocatedMemoryBlock");
             memoryBlock = allocatedMemoryBlock;
             slabArray = null;
         }
@@ -51,7 +51,7 @@ namespace ServerToolkit.BufferManagement
         /// <param name="slab">The Memory Slab to be associated with the ManagedBuffer</param>
         internal ManagedBuffer(IMemorySlab slab)
         {
-            if (slab == null) throw new ArgumentNullException("SlabArray");
+            if (slab == null) throw new ArgumentNullException("slab");
             memoryBlock = null;
             this.slabArray = slab.Array;
         }
@@ -81,6 +81,15 @@ namespace ServerToolkit.BufferManagement
             //TODO: MULTI_ARRAY_SEGMENTS: Fix this
             get { return 1; /*Always 1 for now */ }
         }
+
+        /// <summary>
+        /// Gets the underlying memory block(s)
+        /// </summary>
+        /// <remarks>This property is provided for testing purposes</remarks>
+        internal IMemoryBlock MemoryBlock
+        {
+            get { return memoryBlock; }
+        } 
 
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
@@ -128,12 +137,12 @@ namespace ServerToolkit.BufferManagement
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (length > this.Size || length < 0)
             {
-                throw new ArgumentOutOfRangeException("Length");
+                throw new ArgumentOutOfRangeException("length");
             }
 
-            if (offset > this.Size || offset < 0)
+            if ((offset >= this.Size && this.Size != 0) || offset < 0)
             {
-                throw new ArgumentOutOfRangeException("Offset");
+                throw new ArgumentOutOfRangeException("offset");
             }
 
             IList<ArraySegment<byte>> result = new List<ArraySegment<byte>>();
@@ -145,7 +154,7 @@ namespace ServerToolkit.BufferManagement
             else
             {
                 //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This exception should not take place after implementing multi-array-segments
-                // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be int.MaxValue;
+                // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be (int.MaxValue * 2 - 1);
                 if (offset + memoryBlock.StartLocation > int.MaxValue)
                 {
                     throw new InvalidOperationException("ArraySegment location exceeds int.MaxValue");
@@ -264,8 +273,8 @@ namespace ServerToolkit.BufferManagement
 
         private long slabSize;
         private int initialSlabs, subsequentSlabs;
-        private object sync_slabList = new object(); //synchronizes access to the array of slabs
-        private object sync_newSlab = new object(); //synchronizes access to new slab creation
+        private object syncSlabList = new object(); //synchronizes access to the array of slabs
+        private object syncNewSlab = new object(); //synchronizes access to new slab creation
         private List<IMemorySlab> slabs = new List<IMemorySlab>();
         private int singleSlabPool; //-1 or 0, used for faster access if only one slab is available
 
@@ -278,15 +287,15 @@ namespace ServerToolkit.BufferManagement
         public BufferPool(long slabSize, int initialSlabs, int subsequentSlabs)
         {
 
-            if (slabSize < 1) throw new ArgumentException("SlabSize must be equal to or greater than 1");
-            if (initialSlabs < 1) throw new ArgumentException("InitialSlabs must be equal to or greater than 1");
-            if (subsequentSlabs < 1) throw new ArgumentException("SubsequentSlabs must be equal to or greater than 1");
+            if (slabSize < 1) throw new ArgumentException("slabSize must be equal to or greater than 1");
+            if (initialSlabs < 1) throw new ArgumentException("initialSlabs must be equal to or greater than 1");
+            if (subsequentSlabs < 1) throw new ArgumentException("subsequentSlabs must be equal to or greater than 1");
 
             this.slabSize = slabSize > MinimumSlabSize ? slabSize : MinimumSlabSize;
             this.initialSlabs = initialSlabs;
             this.subsequentSlabs = subsequentSlabs;
 
-            lock (sync_slabList)
+            lock (syncSlabList)
             {
                 if (slabs.Count == 0)
                 {
@@ -350,7 +359,7 @@ namespace ServerToolkit.BufferManagement
         public IBuffer GetBuffer(long size)
         {
 
-            if (size < 0) throw new ArgumentException("Length must be greater than 0");
+            if (size < 0) throw new ArgumentException("size must be greater than 0");
 
             if (size == 0) return new ManagedBuffer(firstSlab); //Return an empty buffer
 
@@ -376,7 +385,7 @@ namespace ServerToolkit.BufferManagement
             else
             {
 
-                lock (sync_slabList)
+                lock (syncSlabList)
                 {
                     slabArr = slabs.ToArray();
                 }
@@ -388,10 +397,10 @@ namespace ServerToolkit.BufferManagement
             }
 
 
-            lock (sync_newSlab)
+            lock (syncNewSlab)
             {
                 //Look again for free block
-                lock (sync_slabList)
+                lock (syncSlabList)
                 {
                     slabArr = slabs.ToArray();
                 }
@@ -407,10 +416,9 @@ namespace ServerToolkit.BufferManagement
 
                 newSlab.TryAllocate(size, out allocatedBlock);
 
-                lock (sync_slabList)
+                lock (syncSlabList)
                 {
                     //Add new Slab to collection
-
                     slabs.Add(newSlab);
 
                     //Add extra slabs as requested in object properties
@@ -431,7 +439,7 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         internal void TryFreeSlab()
         {
-            lock (sync_slabList)
+            lock (syncSlabList)
             {
                 int emptySlabsCount = 0;
                 int lastemptySlab = -1;
