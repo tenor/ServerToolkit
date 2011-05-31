@@ -148,7 +148,7 @@ namespace ServerToolkit.BufferManagement
                     AddFreeBlock(0, size);
                     this.slabSize = size;
                     this.pool = pool;
-                    // GC.Collect(); //Perform Garbage Collection before creating large array -- may be useful
+                    // GC.Collect(); //Perform Garbage Collection before creating large array -- commented out but may be useful
                     array = new byte[size];
                 }
             }
@@ -240,7 +240,6 @@ namespace ServerToolkit.BufferManagement
                     //add new Freeblock with the smaller remaining space
                     AddFreeBlock(newFreeStartLocation, newFreeSize);
 
-
                 }
 
             }
@@ -305,7 +304,7 @@ namespace ServerToolkit.BufferManagement
                 //This slab is empty. prod pool to do some cleanup
                 if (pool != null)
                 {
-                    pool.TryFreeSlab();
+                    pool.TryFreeSlabs();
                 }
             }
 
@@ -389,8 +388,11 @@ namespace ServerToolkit.BufferManagement
         /// Gets the largest unallocated contiguous block size in the slab
         /// </summary>
         /// <returns>The size of the largest free contiguous block</returns>
-        protected long GetLargest()
+        protected virtual long GetLargest()
         {
+            //This IF statement should be sufficiently complex to prevent inline optimization,
+            //however the method is also marked 'virtual' to be extra sure
+
             if (is64BitMachine)
             {
                 return largest;

@@ -60,7 +60,7 @@ namespace ServerToolkit.BufferManagement
         /// <summary>
         /// Gets a value indicating whether the buffer is disposed.
         /// </summary>
-        public bool IsDisposed
+        public virtual bool IsDisposed
         {
             get { return disposed; }
         }
@@ -86,7 +86,7 @@ namespace ServerToolkit.BufferManagement
         /// Gets the underlying memory block(s)
         /// </summary>
         /// <remarks>This property is provided for testing purposes</remarks>
-        internal IMemoryBlock MemoryBlock
+        internal IMemoryBlock MemoryBlocks
         {
             get { return memoryBlock; }
         } 
@@ -154,7 +154,7 @@ namespace ServerToolkit.BufferManagement
             else
             {
                 //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This exception should not take place after implementing multi-array-segments
-                // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be (int.MaxValue * 2 - 1);
+                // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be (int.MaxValue * 2);
                 if (offset + memoryBlock.StartLocation > int.MaxValue)
                 {
                     throw new InvalidOperationException("ArraySegment location exceeds int.MaxValue");
@@ -301,11 +301,11 @@ namespace ServerToolkit.BufferManagement
                 {
                     if (initialSlabs > 1)
                     {
-                        Interlocked.Exchange(ref singleSlabPool, 0); //false
+                        SingleSlabPool = false;
                     }
                     else
                     {
-                        Interlocked.Exchange(ref singleSlabPool, -1); //true
+                        SingleSlabPool = true;
                     }
 
                     for (int i = 0; i < initialSlabs; i++)
@@ -351,6 +351,18 @@ namespace ServerToolkit.BufferManagement
             get { return slabs.Count; }
         }
 
+        //Property accessor for the optimization singleSlabPool field. This property is accessed instead of the field
+        //to prevent the compiler from performing optimizations that may render the field unreliable
+        protected virtual bool SingleSlabPool
+        {
+            get { return singleSlabPool == -1 ? true : false; }
+            set
+            {
+                Interlocked.Exchange(ref singleSlabPool, value == true ? -1 : 0);
+            }
+        }
+
+
         /// <summary>
         /// Creates a buffer of the specified size
         /// </summary>
@@ -366,7 +378,7 @@ namespace ServerToolkit.BufferManagement
             IMemoryBlock allocatedBlock;
             IMemorySlab[] slabArr;
 
-            if (singleSlabPool == -1)
+            if (SingleSlabPool)
             {
                 //Optimization: Chances are that there'll be just one slab in a pool, so access it directly 
                 //and avoid the lock statement involved while creating an array of slabs.
@@ -380,7 +392,7 @@ namespace ServerToolkit.BufferManagement
                     return new ManagedBuffer(allocatedBlock);
                 }
 
-                Interlocked.Exchange(ref singleSlabPool, 0); // Slab count will soon be incremented
+                SingleSlabPool = false; // Slab count will soon be incremented
             }
             else
             {
@@ -437,7 +449,7 @@ namespace ServerToolkit.BufferManagement
         /// <summary>
         /// Searches for empty slabs and frees one if there are more than InitialSlabs number of slabs.
         /// </summary>
-        internal void TryFreeSlab()
+        internal void TryFreeSlabs()
         {
             lock (syncSlabList)
             {
@@ -452,12 +464,16 @@ namespace ServerToolkit.BufferManagement
                     }
                 }
 
+                
                 if (emptySlabsCount > InitialSlabs) //There should be at least 1+initial slabs empty slabs before one is removed
                 {
+                    //TODO: MULTI-SLAB: Consider freeing all free slabs that exceed the initial slabs count
+                    //'cos a buffer can span several slabs and can actually free multiple slabs instanttly.
+
                     //remove the last empty one
                     slabs.RemoveAt(lastemptySlab);
 
-                    if (slabs.Count == 1) Interlocked.Exchange(ref singleSlabPool, -1);
+                    if (slabs.Count == 1) SingleSlabPool = true;
                 }
 
             }

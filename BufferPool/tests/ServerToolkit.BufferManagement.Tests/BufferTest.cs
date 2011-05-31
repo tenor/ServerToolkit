@@ -395,26 +395,26 @@ namespace ServerToolkit.BufferManagement.Tests
             int Length = (int)(blockSize - 1);
             ArraySegment<byte> actual;
             actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array);
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
 
             //Test for full blocksize
             Offset = 0;
             Length = (int)blockSize;
             actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
 
 
             //Test for offset of 1
             Offset = 1;
             Length = (int)(blockSize - 1);
             actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
 
 
         }
@@ -433,9 +433,9 @@ namespace ServerToolkit.BufferManagement.Tests
             int Length = 0;
             ArraySegment<byte> actual;
             actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
 
         }
 
@@ -481,16 +481,16 @@ namespace ServerToolkit.BufferManagement.Tests
             int Length = (int)(blockSize - 1);
             ArraySegment<byte> actual;
             actual = target.GetSegments(Length)[0];
-            Assert.AreEqual<long>(actual.Offset, target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
 
             //Test again for full blocksize
             Length = (int)(blockSize - 1);
             actual = target.GetSegments(Length)[0];
-            Assert.AreEqual<long>(actual.Offset, target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
 
         }
 
@@ -507,9 +507,9 @@ namespace ServerToolkit.BufferManagement.Tests
             int Length = 0;
             ArraySegment<byte> actual;
             actual = target.GetSegments(Length)[0];
-            Assert.AreEqual<long>(actual.Offset, 0 + target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, 0 + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
 
         }
 
@@ -538,9 +538,9 @@ namespace ServerToolkit.BufferManagement.Tests
             ManagedBuffer target = GetNewBuffer(slab);
             ArraySegment<byte> actual;
             actual = target.GetSegments()[0];
-            Assert.AreEqual<long>(actual.Offset, target.MemoryBlock.StartLocation);
+            Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Math.Min(target.Size, int.MaxValue ));
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlock.Slab.Array);
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
 
         }
 

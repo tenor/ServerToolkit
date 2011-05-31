@@ -232,7 +232,7 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<long>(InitialSlabs, target.SlabCount);
 
             //Try to free a slab and do a recount -- slabcount should remain 1
-            target.TryFreeSlab();
+            target.TryFreeSlabs();
             Assert.AreEqual<long>(InitialSlabs, target.SlabCount);
 
             //Get it again to force construction of 3 new slabs
@@ -240,26 +240,26 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<long>(SubsequentSlabs + InitialSlabs, target.SlabCount);
             
             //Free a slab and do a recount
-            target.TryFreeSlab();
+            target.TryFreeSlabs();
             Assert.AreEqual<long>(SubsequentSlabs + InitialSlabs - 1, target.SlabCount);
 
             //Free a slab and do a recount -- slabcount should not budge since only one slab is free
-            target.TryFreeSlab();
+            target.TryFreeSlabs();
             Assert.AreEqual<long>(SubsequentSlabs + InitialSlabs - 1, target.SlabCount);
 
             //Try to free a slab and do a recount
             //Free 1st buffer
             buff1.Dispose();
-            target.TryFreeSlab();
+            target.TryFreeSlabs();
             Assert.AreEqual<long>(SubsequentSlabs + InitialSlabs - 2, target.SlabCount);
 
             //Try to free a slab and do a recount -- slabcount shouldn't go below two
-            target.TryFreeSlab();
+            target.TryFreeSlabs();
             Assert.AreEqual<long>(SubsequentSlabs + InitialSlabs - 2, target.SlabCount);
 
             //Free buffer, try to free a slab and do a recount -- slabcount should now be back to 1
             buff2.Dispose();
-            target.TryFreeSlab();
+            target.TryFreeSlabs();
             Assert.AreEqual<long>(SubsequentSlabs + InitialSlabs - 3, target.SlabCount);
 
         }
