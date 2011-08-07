@@ -295,8 +295,9 @@ namespace ServerToolkit.BufferManagement
             this.initialSlabs = initialSlabs;
             this.subsequentSlabs = subsequentSlabs;
 
-            lock (syncSlabList)
-            {
+            // lock is unnecessary in this instance constructor
+            //lock (syncSlabList)
+            //{
                 if (slabs.Count == 0)
                 {
                     if (initialSlabs > 1)
@@ -315,7 +316,7 @@ namespace ServerToolkit.BufferManagement
 
                     firstSlab = slabs[0];
                 }
-            }
+            //}
         }
 
         /// <summary>
@@ -409,6 +410,7 @@ namespace ServerToolkit.BufferManagement
             }
 
 
+            //Try to create new slab
             lock (syncNewSlab)
             {
                 //Look again for free block

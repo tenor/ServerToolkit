@@ -140,8 +140,9 @@ namespace ServerToolkit.BufferManagement
                 is64BitMachine = false;
             }
 
-            lock (sync)
-            {
+            // lock is unnecessary in this instance constructor
+            //lock (sync)
+            //{
                 IMemoryBlock first;
                 if (!dictStartLoc.TryGetValue(0, out first))
                 {
@@ -151,7 +152,7 @@ namespace ServerToolkit.BufferManagement
                     // GC.Collect(); //Perform Garbage Collection before creating large array -- commented out but may be useful
                     array = new byte[size];
                 }
-            }
+            //}
         }
 
         /// <summary>
