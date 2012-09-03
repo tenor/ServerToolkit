@@ -187,7 +187,7 @@ namespace ServerToolkit.BufferManagement
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (destinationArray == null) throw new ArgumentNullException("destinationArray");
-            if (length > this.Size) throw new ArgumentException("Buffer length is greater than Destination array length");
+            if (length > this.Size) throw new ArgumentException("length is larger than buffer size");
             if (this.Size == 0) return;
 
             Array.Copy(memoryBlock.Slab.Array, memoryBlock.StartLocation, destinationArray, destinationIndex, length);
@@ -198,11 +198,10 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
         /// <remarks>The length of the sourceArray must be less than or equal to the buffer size.</remarks>
+        [Obsolete("Use the FillWith method instead -- this method will be removed in a later version", true)]
         public void CopyFrom(byte[] sourceArray)
         {
-            if (disposed) throw new ObjectDisposedException(this.ToString());
-
-            CopyFrom(sourceArray, 0, sourceArray.Length);
+            FillWith(sourceArray);
         }
 
         /// <summary>
@@ -211,14 +210,41 @@ namespace ServerToolkit.BufferManagement
         /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
         /// <param name="sourceIndex">The index in the sourceArray at which copying begins.</param>
         /// <param name="length">The number of bytes to copy.</param>
+        [Obsolete("Use the FillWith method instead -- this method will be removed in a later version", true)]
         public void CopyFrom(byte[] sourceArray, long sourceIndex, long length)
         {
+            FillWith(sourceArray, sourceIndex, length);
+        }
+
+        /// <summary>
+        /// Copies data from a byte array into the buffer.
+        /// </summary>
+        /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
+        /// <remarks>The length of the sourceArray must be less than or equal to the buffer size.</remarks>
+        public void FillWith(byte[] sourceArray)
+        {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-            if (sourceArray == null) throw new ArgumentNullException("sourceArray");            
-            if (length > (sourceIndex + this.Size)) throw new ArgumentException("Source array length is less than buffer length");
+
+            FillWith(sourceArray, 0, sourceArray.Length);
+        }
+
+        /// <summary>
+        /// Copies data from a byte array into the buffer.
+        /// </summary>
+        /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
+        /// <param name="sourceIndex">The index in the sourceArray at which copying begins.</param>
+        /// <param name="length">The number of bytes to copy.</param>
+        public void FillWith(byte[] sourceArray, long sourceIndex, long length)
+        {
+            if (disposed) throw new ObjectDisposedException(this.ToString());
+            if (sourceArray == null) throw new ArgumentNullException("sourceArray");
+            if (length > (sourceIndex + this.Size)) throw new ArgumentException("length will not fit in the buffer");
             if (this.Size == 0) return;
 
             Array.Copy(sourceArray, sourceIndex, memoryBlock.Slab.Array, memoryBlock.StartLocation, length);
+
+            //NOTE: try not to keep this method as simple as possible, it's can be called from IBuffer.GetBuffer
+            //and we do not want new unexpected exceptions been thrown.
         }
 
         /// <summary>
@@ -371,10 +397,34 @@ namespace ServerToolkit.BufferManagement
         /// <returns>IBuffer object of requested size</returns>        
         public IBuffer GetBuffer(long size)
         {
+            return GetBuffer(size, null);
+        }
 
+        /// <summary>
+        /// Creates a buffer of the specified size, filled with the contents of a specified byte array
+        /// </summary>
+        /// <param name="size">Buffer size, in bytes</param>
+        /// <param name="filledWith">Byte array to copy to buffer</param>
+        /// <returns>IBuffer object of requested size</returns>
+        public IBuffer GetBuffer(long size, byte[] filledWith)
+        {
             if (size < 0) throw new ArgumentException("size must be greater than 0");
 
-            if (size == 0) return new ManagedBuffer(firstSlab); //Return an empty buffer
+            //Make sure filledWith can fit into the requested buffer, so that we do not allocate a buffer and then
+            //an exception is thrown (when IBuffer.FillWith() is called) before the buffer is returned.
+            if (filledWith != null)
+            {
+                if (filledWith.LongLength == 0) filledWith = null;
+                if (filledWith.LongLength > size) throw new ArgumentException("Length of filledWith array cannot be larger than desired buffer size");
+
+                //TODO: Write test that will test that IBuffer.FillWith() doesn't throw an exception (and that buffers aren't allocated) in this method
+            }
+
+            if (size == 0)
+            {
+                //Return an empty buffer
+                return new ManagedBuffer(firstSlab);
+            }
 
             IMemoryBlock allocatedBlock;
             IMemorySlab[] slabArr;
@@ -390,7 +440,9 @@ namespace ServerToolkit.BufferManagement
                 slabArr = new IMemorySlab[] { firstSlab };
                 if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
                 {
-                    return new ManagedBuffer(allocatedBlock);
+                    var buffer = new ManagedBuffer(allocatedBlock);
+                    if (filledWith != null) buffer.FillWith(filledWith);
+                    return buffer;
                 }
 
                 SingleSlabPool = false; // Slab count will soon be incremented
@@ -405,7 +457,9 @@ namespace ServerToolkit.BufferManagement
 
                 if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
                 {
-                    return new ManagedBuffer(allocatedBlock);
+                    var buffer = new ManagedBuffer(allocatedBlock);
+                    if (filledWith != null) buffer.FillWith(filledWith);
+                    return buffer;
                 }
             }
 
@@ -418,7 +472,7 @@ namespace ServerToolkit.BufferManagement
                 {
                     slabArr = slabs.ToArray();
                 }
-                
+
                 if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
                 {
                     //found it -- leave
@@ -444,8 +498,9 @@ namespace ServerToolkit.BufferManagement
 
             }
 
-            return new ManagedBuffer(allocatedBlock);
-
+            var newBuffer = new ManagedBuffer(allocatedBlock);
+            if (filledWith != null) newBuffer.FillWith(filledWith);
+            return newBuffer;
         }
 
         /// <summary>
@@ -504,7 +559,6 @@ namespace ServerToolkit.BufferManagement
 
             return false;
         }
-
 
     }
 }

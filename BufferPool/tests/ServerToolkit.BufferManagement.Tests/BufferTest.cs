@@ -115,11 +115,11 @@ namespace ServerToolkit.BufferManagement.Tests
         }
 
         /// <summary>
-        ///A test for CopyFrom
+        ///A test for FillWith
         ///</summary>
         [TestMethod()]
-        [Description("CopyFrom() copies full source array")]
-        public void CopyFromTest()
+        [Description("FillWith() copies full source array")]
+        public void FillWithTest()
         {
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target1, target2;
@@ -128,7 +128,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 ManagedBuffer target = GetNewBuffer(slab);
                 target1 = target;
                 byte[] SourceArray = GetRandomizedByteArray(blockSize);
-                target.CopyFrom(SourceArray);
+                target.FillWith(SourceArray);
                 byte[] copyOfDestination = new byte[blockSize];
                 Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
@@ -136,7 +136,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 //Source Array is smaller than ManagedBuffer Size
                 long blockSizeLess = blockSize - 100;
                 SourceArray = GetRandomizedByteArray(blockSizeLess);
-                target.CopyFrom(SourceArray);
+                target.FillWith(SourceArray);
                 copyOfDestination = new byte[blockSizeLess];
                 Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
@@ -150,7 +150,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 ManagedBuffer target = GetNewBuffer(slab);
                 target2 = target;
                 byte[] SourceArray = GetRandomizedByteArray(blockSize);
-                target.CopyFrom(SourceArray);
+                target.FillWith(SourceArray);
                 byte[] copyOfDestination = new byte[blockSize];
                 Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
@@ -158,7 +158,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 //Source Array is smaller than ManagedBuffer Size
                 long blockSizeLess = blockSize - 1;
                 SourceArray = GetRandomizedByteArray(blockSizeLess);
-                target.CopyFrom(SourceArray);
+                target.FillWith(SourceArray);
                 copyOfDestination = new byte[blockSizeLess];
                 Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
                 Assert.IsTrue(ArraysMatch(SourceArray, copyOfDestination));
@@ -171,10 +171,10 @@ namespace ServerToolkit.BufferManagement.Tests
         }
 
         /// <summary>
-        ///A test for CopyFrom
+        ///A test for FillWith
         ///</summary>
         [TestMethod()]
-        [Description("CopyFrom() throws exception when source is larger than ManagedBuffer")]
+        [Description("FillWith() throws exception when source is larger than ManagedBuffer")]
         [ExpectedException(typeof(ArgumentException))]
         public void CopyFromTest2()
         {
@@ -185,24 +185,24 @@ namespace ServerToolkit.BufferManagement.Tests
             long blockSizeMore = blockSize + 1;
             byte[] SourceArray = GetRandomizedByteArray(blockSizeMore);
 
-            target.CopyFrom(SourceArray);
+            target.FillWith(SourceArray);
 
         }
 
 
         /// <summary>
-        ///A test for CopyFrom
+        ///A test for FillWith
         ///</summary>
         [TestMethod()]
         [Description("Source arrays copied into the middle of a buffer are copied accurately")]
-        public void CopyFromTest3()
+        public void FillWithTest3()
         {
 
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
 
             byte[] SourceArray = GetRandomizedByteArray(blockSize);
-            target.CopyFrom(SourceArray,1,blockSize - 2);
+            target.FillWith(SourceArray, 1, blockSize - 2);
             byte[] copyOfDestination = new byte[blockSize - 2];
             byte[] copyOfSource = new byte[blockSize - 2];
             Array.Copy(target.GetSegments()[0].Array, target.GetSegments()[0].Offset, copyOfDestination, 0, copyOfDestination.LongLength);
@@ -224,7 +224,7 @@ namespace ServerToolkit.BufferManagement.Tests
             {
                 ManagedBuffer target = GetNewBuffer(slab);
                 target1 = target;
-                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                target.FillWith(GetRandomizedByteArray(blockSize));
                 byte[] DestArray = new byte[blockSize];
                 target.CopyTo(DestArray);
                 byte[] copyOfSource = new byte[blockSize];
@@ -234,7 +234,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
                 //Destination Array is larger than ManagedBuffer Size
-                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                target.FillWith(GetRandomizedByteArray(blockSize));
                 DestArray = new byte[blockSize + 100];
                 target.CopyTo(DestArray);
                 copyOfSource = new byte[blockSize];
@@ -251,7 +251,7 @@ namespace ServerToolkit.BufferManagement.Tests
             {
                 ManagedBuffer target = GetNewBuffer(slab);
                 target2 = target;
-                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                target.FillWith(GetRandomizedByteArray(blockSize));
                 byte[] DestArray = new byte[blockSize];
                 target.CopyTo(DestArray);
                 byte[] copyOfSource = new byte[blockSize];
@@ -261,7 +261,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 Assert.IsTrue(ArraysMatch(copyOfSource, copyOfDestination));
 
                 //Destination Array is larger than ManagedBuffer Size
-                target.CopyFrom(GetRandomizedByteArray(blockSize));
+                target.FillWith(GetRandomizedByteArray(blockSize));
                 DestArray = new byte[blockSize + 1];
                 target.CopyTo(DestArray);
                 copyOfSource = new byte[blockSize];
@@ -306,7 +306,7 @@ namespace ServerToolkit.BufferManagement.Tests
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
 
-            target.CopyFrom(GetRandomizedByteArray(blockSize));
+            target.FillWith(GetRandomizedByteArray(blockSize));
             byte[] DestArray = new byte[blockSize];
             target.CopyTo(DestArray, 1, blockSize - 2);
             byte[] copyOfSource = new byte[blockSize - 2];
@@ -339,7 +339,7 @@ namespace ServerToolkit.BufferManagement.Tests
 
                 try
                 {
-                    target.CopyFrom(new byte[] { 0, 1, 2 });
+                    target.FillWith(new byte[] { 0, 1, 2 });
                 }
                 catch (ObjectDisposedException)
                 {

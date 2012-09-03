@@ -82,6 +82,22 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
         /// <remarks>The length of the sourceArray must be less than or equal to the buffer size.</remarks>
+        void FillWith(byte[] sourceArray);
+
+        /// <summary>
+        /// Copies data from a byte array to the buffer.
+        /// </summary>
+        /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
+        /// <param name="sourceIndex">The index in the sourceArray at which copying begins.</param>
+        /// <param name="length">The number of bytes to copy.</param>
+        void FillWith(byte[] sourceArray, long sourceIndex, long length);
+
+        /// <summary>
+        /// Copies data from a byte array to the buffer.
+        /// </summary>
+        /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
+        /// <remarks>The length of the sourceArray must be less than or equal to the buffer size.</remarks>
+        [Obsolete("Use the FillWith method instead -- this method will be removed in a later version",true)]
         void CopyFrom(byte[] sourceArray);
 
         /// <summary>
@@ -90,6 +106,7 @@ namespace ServerToolkit.BufferManagement
         /// <param name="sourceArray">The one-dimensional byte array that contains the data.</param>
         /// <param name="sourceIndex">The index in the sourceArray at which copying begins.</param>
         /// <param name="length">The number of bytes to copy.</param>
+        [Obsolete("Use the FillWith method instead -- this method will be removed in a later version", true)]
         void CopyFrom(byte[] sourceArray, long sourceIndex, long length);
     }
 
@@ -119,6 +136,14 @@ namespace ServerToolkit.BufferManagement
         /// <param name="size">Buffer size, in bytes</param>
         /// <returns>IBuffer object of requested size</returns>
         IBuffer GetBuffer(long size);
+
+        /// <summary>
+        /// Creates a buffer of the specified size, filled with the contents of a specified byte array
+        /// </summary>
+        /// <param name="size">Buffer size, in bytes</param>
+        /// <param name="filledWith">Byte array to copy to buffer</param>
+        /// <returns>IBuffer object of requested size</returns>
+        IBuffer GetBuffer(long size, byte[] filledWith);
 
     }
 }
