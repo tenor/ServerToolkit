@@ -20,14 +20,15 @@ namespace ServerToolkit.BufferManagement
 {
     using System;
     using System.Collections.Generic;
+    using System.Runtime.CompilerServices;
     using System.Threading;
 
     /// <summary>
     /// Represents an efficiently allocated buffer for asynchronous read/write operations.
     /// </summary>
-    public class ManagedBuffer : IBuffer
+    public sealed class ManagedBuffer : IBuffer
     {
-        protected bool disposed = false;
+        private bool disposed = false;
 
         readonly IMemoryBlock memoryBlock;
         readonly byte[] slabArray;
@@ -60,7 +61,7 @@ namespace ServerToolkit.BufferManagement
         /// <summary>
         /// Gets a value indicating whether the buffer is disposed.
         /// </summary>
-        public virtual bool IsDisposed
+        public bool IsDisposed
         {
             get { return disposed; }
         }
@@ -99,7 +100,7 @@ namespace ServerToolkit.BufferManagement
         /// Gets buffer segments that can be passed on to an asynchronous socket operation.
         /// </summary>
         /// <returns>A list of ArraySegments(of Byte) containing buffer segments.</returns>
-        public virtual IList<ArraySegment<byte>> GetSegments()
+        public IList<ArraySegment<byte>> GetSegments()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
 
@@ -120,7 +121,7 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="length">Total length of segments.</param>
         /// <returns>A list of ArraySegments(of Byte) containing buffer segments.</returns>
-        public virtual IList<ArraySegment<byte>> GetSegments(long length)
+        public IList<ArraySegment<byte>> GetSegments(long length)
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             return GetSegments(0, length);
@@ -260,7 +261,7 @@ namespace ServerToolkit.BufferManagement
         /// Releases resources used by the buffer.
         /// </summary>
         /// <param name="disposing">True, to indicate you want to release all resources. False to release only native resources.</param>
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (disposing)
             {
@@ -292,7 +293,7 @@ namespace ServerToolkit.BufferManagement
     /// <summary>
     /// Provides a pool of buffers that can be used to efficiently allocate memory for asynchronous socket operations
     /// </summary>
-    public class BufferPool : IBufferPool
+    public sealed class BufferPool : IBufferPool
     {
         public const int MinimumSlabSize = 92160; //90 KB to force slab into LOH
         private readonly IMemorySlab firstSlab;
@@ -326,14 +327,7 @@ namespace ServerToolkit.BufferManagement
             //{
                 if (slabs.Count == 0)
                 {
-                    if (initialSlabs > 1)
-                    {
-                        SingleSlabPool = false;
-                    }
-                    else
-                    {
-                        SingleSlabPool = true;
-                    }
+                    SetSingleSlabPool(initialSlabs == 1); //Assume for optimization reasons that it's a single slab pool if the number of initial slabs is 1
 
                     for (int i = 0; i < initialSlabs; i++)
                     {
@@ -378,15 +372,19 @@ namespace ServerToolkit.BufferManagement
             get { return slabs.Count; }
         }
 
-        //Property accessor for the optimization singleSlabPool field. This property is accessed instead of the field
+
+        //Pair of Get/Set methods for the optimization singleSlabPool field. This property is accessed instead of the field
         //to prevent the compiler from performing optimizations that may render the field unreliable
-        protected virtual bool SingleSlabPool
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private bool GetSingleSlabPool()
         {
-            get { return singleSlabPool == -1 ? true : false; }
-            set
-            {
-                Interlocked.Exchange(ref singleSlabPool, value == true ? -1 : 0);
-            }
+            return singleSlabPool == -1 ? true : false;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void SetSingleSlabPool(bool value)
+        {
+            Interlocked.Exchange(ref singleSlabPool, value == true ? -1 : 0);
         }
 
 
@@ -429,7 +427,7 @@ namespace ServerToolkit.BufferManagement
             IMemoryBlock allocatedBlock;
             IMemorySlab[] slabArr;
 
-            if (SingleSlabPool)
+            if (GetSingleSlabPool())
             {
                 //Optimization: Chances are that there'll be just one slab in a pool, so access it directly 
                 //and avoid the lock statement involved while creating an array of slabs.
@@ -445,7 +443,7 @@ namespace ServerToolkit.BufferManagement
                     return buffer;
                 }
 
-                SingleSlabPool = false; // Slab count will soon be incremented
+                SetSingleSlabPool(false); // Slab count will soon be incremented
             }
             else
             {
@@ -530,7 +528,7 @@ namespace ServerToolkit.BufferManagement
                     //remove the last empty one
                     slabs.RemoveAt(lastemptySlab);
 
-                    if (slabs.Count == 1) SingleSlabPool = true;
+                    if (slabs.Count == 1) SetSingleSlabPool(true);
                 }
 
             }

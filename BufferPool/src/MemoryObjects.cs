@@ -20,12 +20,13 @@ namespace ServerToolkit.BufferManagement
 {
     using System;
     using System.Collections.Generic;
+    using System.Runtime.CompilerServices;
     using System.Threading;
 
     /// <summary>
     /// Represents a defined block in memory
     /// </summary>
-    internal class MemoryBlock : IMemoryBlock
+    internal sealed class MemoryBlock : IMemoryBlock
     {
         readonly long startLoc, endLoc, length;
         readonly IMemorySlab owner;
@@ -59,7 +60,7 @@ namespace ServerToolkit.BufferManagement
         /// <summary>
         /// Gets the offset in the slab where the memory block begins.
         /// </summary>
-        public virtual long StartLocation
+        public long StartLocation
         {
             get
             {
@@ -71,7 +72,7 @@ namespace ServerToolkit.BufferManagement
         /// Gets the offset in the slab where the memory block ends.
         /// </summary>
         /// <remarks> EndLocation = StartLocation + Length - 1</remarks>
-        public virtual long EndLocation
+        public long EndLocation
         {
             get
             {
@@ -83,7 +84,7 @@ namespace ServerToolkit.BufferManagement
         /// Gets the length of the memory block, in bytes.
         /// </summary>
         /// <remarks> Length = EndLocation - StartLocation + 1</remarks>
-        public virtual long Length
+        public long Length
         {
             get { return length; }
         }
@@ -91,7 +92,7 @@ namespace ServerToolkit.BufferManagement
         /// <summary>
         /// Gets the containing slab
         /// </summary>
-        public virtual IMemorySlab Slab
+        public IMemorySlab Slab
         {
             get { return owner; }
         }
@@ -101,19 +102,19 @@ namespace ServerToolkit.BufferManagement
     /// <summary>
     /// Represents a large fixed-length memory block where smaller variable-length memory blocks are dynamically allocated
     /// </summary>
-    internal class MemorySlab : IMemorySlab
+    internal sealed class MemorySlab : IMemorySlab
     {
-        protected readonly bool is64BitMachine;
-        protected readonly long slabSize;
-        protected readonly BufferPool pool;
+        private readonly bool is64BitMachine;
+        private readonly long slabSize;
+        private readonly BufferPool pool;
 
-        protected Dictionary<long, IMemoryBlock> dictStartLoc = new Dictionary<long, IMemoryBlock>();
-        protected Dictionary<long, IMemoryBlock> dictEndLoc = new Dictionary<long, IMemoryBlock>();
-        protected SortedDictionary<long, SortedDictionary<long, IMemoryBlock>> freeBlocksList = new SortedDictionary<long, SortedDictionary<long, IMemoryBlock>>();
-        protected object sync = new object();
+        private Dictionary<long, IMemoryBlock> dictStartLoc = new Dictionary<long, IMemoryBlock>();
+        private Dictionary<long, IMemoryBlock> dictEndLoc = new Dictionary<long, IMemoryBlock>();
+        private SortedDictionary<long, SortedDictionary<long, IMemoryBlock>> freeBlocksList = new SortedDictionary<long, SortedDictionary<long, IMemoryBlock>>();
+        private object sync = new object();
 
-        protected long largest = 0;
-        protected byte[] array;
+        private long largest = 0;
+        private byte[] array;
 
         /// <summary>
         /// Initializes a new instance of the MemorySlab class
@@ -191,7 +192,7 @@ namespace ServerToolkit.BufferManagement
         /// <param name="length">Length, in bytes, of memory block</param>
         /// <param name="allocatedBlock">Allocated memory block</param>
         /// <returns>True, if memory block was allocated. False, if otherwise</returns>
-        public virtual bool TryAllocate(long length, out IMemoryBlock allocatedBlock)
+        public bool TryAllocate(long length, out IMemoryBlock allocatedBlock)
         {
             allocatedBlock = null;
             lock (sync)
@@ -253,8 +254,8 @@ namespace ServerToolkit.BufferManagement
         /// Frees an allocated memory block.
         /// </summary>
         /// <param name="allocatedBlock">Allocated memory block to be freed</param>
-        /// <remarks>This method does not detect if the allocatedBlock is indeed from this slab. Callers should make sure that the allocatedblock belongs to the right slab.</remarks>
-        public virtual void Free(IMemoryBlock allocatedBlock)
+        /// <remarks>This method does not verify if the allocatedBlock is indeed from this slab. Callers should make sure that the allocatedblock belongs to the right slab.</remarks>
+        public void Free(IMemoryBlock allocatedBlock)
         {
             lock (sync)
             {
@@ -315,7 +316,7 @@ namespace ServerToolkit.BufferManagement
         /// Sets a new value as the largest unallocated contiguous block size
         /// </summary>
         /// <param name="value">Integral value of new largest unallocated block size</param>
-        protected void SetLargest(long value)
+        private void SetLargest(long value)
         {
             if (is64BitMachine)
             {
@@ -334,7 +335,7 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="startLocation">Offset of block in slab</param>
         /// <param name="length">Length of block</param>
-        protected void AddFreeBlock(long startLocation, long length)
+        private void AddFreeBlock(long startLocation, long length)
         {
             SortedDictionary<long, IMemoryBlock> innerList;
             if (!freeBlocksList.TryGetValue(length, out innerList))
@@ -357,7 +358,7 @@ namespace ServerToolkit.BufferManagement
         /// Marks an unallocated contiguous block as allocated
         /// </summary>
         /// <param name="block">newly allocated block</param>
-        protected void RemoveFreeBlock(IMemoryBlock block)
+        private void RemoveFreeBlock(IMemoryBlock block)
         {
             dictStartLoc.Remove(block.StartLocation);
             dictEndLoc.Remove(block.EndLocation);
@@ -389,10 +390,11 @@ namespace ServerToolkit.BufferManagement
         /// Gets the largest unallocated contiguous block size in the slab
         /// </summary>
         /// <returns>The size of the largest free contiguous block</returns>
-        protected virtual long GetLargest()
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private long GetLargest()
         {
             //This IF statement should be sufficiently complex to prevent inline optimization,
-            //however the method is also marked 'virtual' to be extra sure
+            //however the method is also marked [MethodImpl(MethodImplOptions.NoInlining)] to be extra sure
 
             if (is64BitMachine)
             {
