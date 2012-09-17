@@ -30,17 +30,24 @@ namespace ServerToolkit.BufferManagement
     {
         private bool disposed = false;
 
-        readonly IMemoryBlock memoryBlock;
+        readonly IMemoryBlock[] memoryBlocks;
         readonly byte[] slabArray;
+        readonly long size;
 
         /// <summary>
         /// Initializes a new instance of the ManagedBuffer class, specifying the memory block that the ManagedBuffer reads and writes to.
         /// </summary>
-        /// <param name="allocatedMemoryBlock">Underlying allocated memory block</param>
-        internal ManagedBuffer(IMemoryBlock allocatedMemoryBlock)
+        /// <param name="allocatedMemoryBlocks">Underlying allocated memory block</param>
+        internal ManagedBuffer(IMemoryBlock[] allocatedMemoryBlocks)
         {
-            if (allocatedMemoryBlock == null) throw new ArgumentNullException("allocatedMemoryBlock");
-            memoryBlock = allocatedMemoryBlock;
+            if (allocatedMemoryBlocks == null) throw new ArgumentNullException("allocatedMemoryBlocks");
+            if (allocatedMemoryBlocks.Length == 0) throw new ArgumentException("allocatedMemoryBlocks cannot be empty"); 
+            memoryBlocks = allocatedMemoryBlocks;
+            size = 0;
+            for (int i = 0; i < allocatedMemoryBlocks.Length; i++)
+            {
+                size += allocatedMemoryBlocks[i].Length;
+            }
             slabArray = null;
         }
 
@@ -53,8 +60,9 @@ namespace ServerToolkit.BufferManagement
         internal ManagedBuffer(IMemorySlab slab)
         {
             if (slab == null) throw new ArgumentNullException("slab");
-            memoryBlock = null;
+            memoryBlocks = null;
             this.slabArray = slab.Array;
+            size = 0;
         }
 
 
@@ -71,7 +79,7 @@ namespace ServerToolkit.BufferManagement
         /// </summary>        
         public long Size
         {
-            get { return memoryBlock == null ? 0 : memoryBlock.Length; }
+            get { return size; }
         }
 
         /// <summary>
@@ -79,17 +87,16 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         public int SegmentCount
         {
-            //TODO: MULTI_ARRAY_SEGMENTS: Fix this
-            get { return 1; /*Always 1 for now */ }
+            get { return memoryBlocks == null ? 1 : memoryBlocks.Length; }
         }
 
         /// <summary>
         /// Gets the underlying memory block(s)
         /// </summary>
         /// <remarks>This property is provided for testing purposes</remarks>
-        internal IMemoryBlock MemoryBlocks
+        internal IMemoryBlock[] MemoryBlocks
         {
-            get { return memoryBlock; }
+            get { return memoryBlocks; }
         } 
 
 
@@ -103,17 +110,7 @@ namespace ServerToolkit.BufferManagement
         public IList<ArraySegment<byte>> GetSegments()
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
-
-            //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This int.MaxValue should be removed after implementing multi-array-segments
-            if (this.Size <= int.MaxValue)
-            {
-                return GetSegments(0, (int)this.Size);
-            }
-            else
-            {
-                return GetSegments(0, int.MaxValue);
-            }
-            
+            return GetSegments(0, this.Size);            
         }
 
         /// <summary>
@@ -146,6 +143,8 @@ namespace ServerToolkit.BufferManagement
                 throw new ArgumentOutOfRangeException("offset");
             }
 
+            //TODO: Check if offset + length > this.Size
+
             IList<ArraySegment<byte>> result = new List<ArraySegment<byte>>();
             if (this.Size == 0)
             {
@@ -154,14 +153,50 @@ namespace ServerToolkit.BufferManagement
             }
             else
             {
-                //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This exception should not take place after implementing multi-array-segments
-                // and a limit to SlabSize (MaximumSlabSize) is in place, which would probably be (int.MaxValue * 2);
-                if (offset + memoryBlock.StartLocation > int.MaxValue)
+                //Identify which memory block contains the index to offset and the block's inner offset to sought offset                
+                int startBlockIndex;
+                long startBlockOffSet;
+                FindBlockWithOffset(offset, out startBlockIndex, out startBlockOffSet);
+
+                //Get first segment
+                long totalLength = 0;
                 {
-                    throw new InvalidOperationException("ArraySegment location exceeds int.MaxValue");
+                    var startBlock = memoryBlocks[startBlockIndex];
+                    if (startBlock.Length >= (startBlockOffSet + length))
+                    {
+                        //Block can hold entire desired length
+                        result.Add(new ArraySegment<byte>(startBlock.Slab.Array, (int)(startBlockOffSet + startBlock.StartLocation), (int)length));
+                        return result;
+                    }
+                    else
+                    {
+                        //Block can only hold part of desired length
+                        result.Add(new ArraySegment<byte>(startBlock.Slab.Array, (int)(startBlockOffSet + startBlock.StartLocation), (int)(startBlock.Length - startBlockOffSet)));
+                        totalLength += (startBlock.Length - startBlockOffSet);
+                    }
                 }
 
-                result.Add(new ArraySegment<byte>(memoryBlock.Slab.Array, (int)(offset + memoryBlock.StartLocation), (int)length));
+                //Get next set of segments
+                IMemoryBlock block;
+                for (int i = startBlockIndex + 1; i < memoryBlocks.Length; i++)
+                {
+                    block = memoryBlocks[i];
+                    if (block.Length >= (length - totalLength))
+                    {
+                        //Block can hold the remainder of desired length
+                        result.Add(new ArraySegment<byte>(block.Slab.Array, 0, (int)(length - totalLength)));
+                        return result;
+                    }
+                    else
+                    {
+                        //Block can only hold only part of the remainder of desired length
+                        result.Add(new ArraySegment<byte>(block.Slab.Array, 0, (int)block.Length));
+                        totalLength += block.Length;
+                    }
+
+                }
+
+                System.Diagnostics.Debug.Assert(true, "Execution should never reach this point, the returns above should be responsible for returning result");
                 return result;
             }
         }
@@ -189,9 +224,29 @@ namespace ServerToolkit.BufferManagement
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (destinationArray == null) throw new ArgumentNullException("destinationArray");
             if (length > this.Size) throw new ArgumentException("length is larger than buffer size");
+            if (destinationIndex + length > destinationArray.Length) throw new ArgumentException("destinationIndex + length is greater than length of destinationArray");
             if (this.Size == 0) return;
 
-            Array.Copy(memoryBlock.Slab.Array, memoryBlock.StartLocation, destinationArray, destinationIndex, length);
+            long bytesCopied = 0;
+            IMemoryBlock block;
+            for (int i = 0; i < memoryBlocks.Length; i++)
+            {
+                block = memoryBlocks[i];
+                if (block.Length >= (length - bytesCopied))
+                {
+                    //This block can copy out the remainder of desired length
+                    Array.Copy(block.Slab.Array, block.StartLocation, destinationArray, destinationIndex + bytesCopied, length - bytesCopied);
+                    return;
+                }
+                else
+                {
+                    //This block can only copy out part of desired length
+                    Array.Copy(block.Slab.Array, block.StartLocation, destinationArray, destinationIndex + bytesCopied, block.Length);
+                    bytesCopied += block.Length;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(true, "Execution should never reach this point, the returns above should be responsible for exiting the method");
         }
 
         /// <summary>
@@ -239,13 +294,33 @@ namespace ServerToolkit.BufferManagement
         {
             if (disposed) throw new ObjectDisposedException(this.ToString());
             if (sourceArray == null) throw new ArgumentNullException("sourceArray");
-            if (length > (sourceIndex + this.Size)) throw new ArgumentException("length will not fit in the buffer");
+            if (length > (this.Size - sourceIndex)) throw new ArgumentException("length will not fit in the buffer");
             if (this.Size == 0) return;
-
-            Array.Copy(sourceArray, sourceIndex, memoryBlock.Slab.Array, memoryBlock.StartLocation, length);
 
             //NOTE: try not to keep this method as simple as possible, it's can be called from IBuffer.GetBuffer
             //and we do not want new unexpected exceptions been thrown.
+
+            long bytesCopied = 0;
+            IMemoryBlock block;
+            for (int i = 0; i < memoryBlocks.Length; i++)
+            {
+                block = memoryBlocks[i];
+                if (block.Length >= (length - bytesCopied))
+                {
+                    //This block can be filled with the remainder of desired length
+                    Array.Copy(sourceArray, sourceIndex + bytesCopied, block.Slab.Array, block.StartLocation, length - bytesCopied);
+                    return;
+                }
+                else
+                {
+                    //This block can be filled with only part of desired length
+                    Array.Copy(sourceArray, sourceIndex + bytesCopied, block.Slab.Array, block.StartLocation, block.Length);
+                    bytesCopied += block.Length;
+                }
+            }
+
+            System.Diagnostics.Debug.Assert(true, "Execution should never reach this point, the returns above should be responsible for exiting the method");
+
         }
 
         /// <summary>
@@ -269,22 +344,44 @@ namespace ServerToolkit.BufferManagement
                 {
                     disposed = true;
 
-                    try
+                    if (memoryBlocks != null)
                     {
-                        if (memoryBlock != null)
+                        for (int i = 0; i < memoryBlocks.Length; i++)
                         {
-                            memoryBlock.Slab.Free(memoryBlock);
+                            try
+                            {
+                                memoryBlocks[i].Slab.Free(memoryBlocks[i]);
+                            }
+                            catch
+                            {
+                                //Suppress exception in release mode
+                                #if DEBUG
+                                    throw;
+                                #endif
+                            }
                         }
                     }
-                    catch
-                    {
-                        //Suppress exception in release mode
-                        #if DEBUG
-                            throw;
-                        #endif
-                    }
-
                 }
+            }
+        }
+
+        //This helper method identifies the block that holds an 'outer' offset and the inner offset within that block
+        private void FindBlockWithOffset(long offset, out int blockIndex, out long blockOffSet)
+        {
+            long totalScannedLength = 0;
+            blockIndex = 0;
+            blockOffSet = 0;
+            for (int i = 0; i < memoryBlocks.Length; i++)
+            {
+                if (offset < totalScannedLength + memoryBlocks[i].Length)
+                {
+                    //Found block;
+                    blockIndex = i;
+                    //Calculate start offset within block
+                    blockOffSet = offset - totalScannedLength;
+                    break;
+                }
+                totalScannedLength += memoryBlocks[i].Length;
             }
         }
 
@@ -296,14 +393,20 @@ namespace ServerToolkit.BufferManagement
     public sealed class BufferPool : IBufferPool
     {
         public const int MinimumSlabSize = 92160; //90 KB to force slab into LOH
-        private readonly IMemorySlab firstSlab;
 
-        private long slabSize;
-        private int initialSlabs, subsequentSlabs;
-        private object syncSlabList = new object(); //synchronizes access to the array of slabs
-        private object syncNewSlab = new object(); //synchronizes access to new slab creation
-        private List<IMemorySlab> slabs = new List<IMemorySlab>();
+        //This restriction is in place because of ArraySegment's (T[], int, int) constructor
+        //If a slab exceeds the MaximumSlabSize, an array segment cannot access data beyond the int.MaxValue location
+        public const long MaximumSlabSize = ((long)int.MaxValue) + 1; 
+
+        private readonly IMemorySlab firstSlab;
+        private readonly long slabSize;
+        private readonly int initialSlabs, subsequentSlabs;
+        private readonly object syncSlabList = new object(); //synchronizes access to the array of slabs
+        private readonly object syncNewSlab = new object(); //synchronizes access to new slab creation
+        private readonly List<IMemorySlab> slabs = new List<IMemorySlab>();
         private int singleSlabPool; //-1 or 0, used for faster access if only one slab is available
+
+        private const int MAX_SEGMENTS_PER_BUFFER = 16; //Maximum number of segments in a buffer.
 
         /// <summary>
         /// Initializes a new instance of the BufferPool class
@@ -317,6 +420,7 @@ namespace ServerToolkit.BufferManagement
             if (slabSize < 1) throw new ArgumentException("slabSize must be equal to or greater than 1");
             if (initialSlabs < 1) throw new ArgumentException("initialSlabs must be equal to or greater than 1");
             if (subsequentSlabs < 1) throw new ArgumentException("subsequentSlabs must be equal to or greater than 1");
+            if (slabSize > MaximumSlabSize) throw new ArgumentException("slabSize cannot be larger BufferPool.MaximumSlabSize");
 
             this.slabSize = slabSize > MinimumSlabSize ? slabSize : MinimumSlabSize;
             this.initialSlabs = initialSlabs;
@@ -408,6 +512,8 @@ namespace ServerToolkit.BufferManagement
         {
             if (size < 0) throw new ArgumentException("size must be greater than 0");
 
+            //TODO: If size is larger than 16 * SlabSize (or 16 * MaxNumberOfSegments) then throw exception saying you can't have a buffer greater than 16 times Slab size
+
             //Make sure filledWith can fit into the requested buffer, so that we do not allocate a buffer and then
             //an exception is thrown (when IBuffer.FillWith() is called) before the buffer is returned.
             if (filledWith != null)
@@ -424,8 +530,9 @@ namespace ServerToolkit.BufferManagement
                 return new ManagedBuffer(firstSlab);
             }
 
-            IMemoryBlock allocatedBlock;
+            List<IMemoryBlock> allocatedBlocks = new List<IMemoryBlock>();
             IMemorySlab[] slabArr;
+            long currentlyAllocdLength = 0;
 
             if (GetSingleSlabPool())
             {
@@ -436,9 +543,17 @@ namespace ServerToolkit.BufferManagement
                 //The optimization is effective because singleSlabPool will be accurate majority of the time.
 
                 slabArr = new IMemorySlab[] { firstSlab };
-                if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
+                List<IMemoryBlock> allocd;
+                currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
+                if (currentlyAllocdLength > 0)
                 {
-                    var buffer = new ManagedBuffer(allocatedBlock);
+                    allocatedBlocks.AddRange(allocd);
+                }
+
+                if (currentlyAllocdLength == size)
+                {
+                    //We got the entire length we are looking for, so leave
+                    var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
                     if (filledWith != null) buffer.FillWith(filledWith);
                     return buffer;
                 }
@@ -453,9 +568,16 @@ namespace ServerToolkit.BufferManagement
                     slabArr = slabs.ToArray();
                 }
 
-                if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
+                List<IMemoryBlock> allocd;
+                currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
+                if (currentlyAllocdLength > 0)
                 {
-                    var buffer = new ManagedBuffer(allocatedBlock);
+                    allocatedBlocks.AddRange(allocd);
+                }
+                if (currentlyAllocdLength == size)
+                {
+                    //We got the entire length we are looking for, so leave
+                    var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
                     if (filledWith != null) buffer.FillWith(filledWith);
                     return buffer;
                 }
@@ -471,32 +593,91 @@ namespace ServerToolkit.BufferManagement
                     slabArr = slabs.ToArray();
                 }
 
-                if (TryAllocateBlockInSlabs(size, slabArr, out allocatedBlock))
+                List<IMemoryBlock> allocd;
+                long allocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, out allocd);
+                if (allocdLength > 0)
+                {
+                    allocatedBlocks.AddRange(allocd);
+                    currentlyAllocdLength += allocdLength;
+                }
+                if (currentlyAllocdLength == size)
                 {
                     //found it -- leave
-                    return new ManagedBuffer(allocatedBlock);
+                    var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
+                    if (filledWith != null) buffer.FillWith(filledWith);
+                    return buffer;
                 }
 
-                //Unable to find available free space, so create new slab
-                MemorySlab newSlab = new MemorySlab(slabSize, this);
+                List<IMemorySlab> newSlabList = new List<IMemorySlab>();
+                do
+                {
+                    MemorySlab newSlab;
+                    try
+                    {
+                        //Unable to find available free space, so create new slab
+                        newSlab = new MemorySlab(slabSize, this);
+                    }
+                    catch (OutOfMemoryException)
+                    {
+                        //Free all currently allocated blocks to avoid a situation where blocks are allocated but caller is unaware and can't deallocate them.
+                        for (int i = 0; i < allocatedBlocks.Count; i++)
+                        {
+                            allocatedBlocks[i].Slab.Free(allocatedBlocks[i]);
+                        }
 
-                newSlab.TryAllocate(size, out allocatedBlock);
+                        throw;
+                    }
+
+                    IMemoryBlock allocdBlk;
+                    if (slabSize > size - currentlyAllocdLength)
+                    {
+                        //Allocate remnant
+                        newSlab.TryAllocate(size - currentlyAllocdLength, out allocdBlk);
+                    }
+                    else
+                    {
+                        //Allocate entire slab
+                        newSlab.TryAllocate(slabSize, out allocdBlk);
+                    }
+
+                    newSlabList.Add(newSlab);
+                    allocatedBlocks.Add(allocdBlk);
+                    currentlyAllocdLength += allocdBlk.Length;
+                }
+                while (currentlyAllocdLength < size);
+
+
 
                 lock (syncSlabList)
                 {
-                    //Add new Slab to collection
-                    slabs.Add(newSlab);
+                    //Add new slabs to collection
+                    slabs.AddRange(newSlabList);
 
                     //Add extra slabs as requested in object properties
                     for (int i = 0; i < subsequentSlabs - 1; i++)
                     {
-                        slabs.Add(new MemorySlab(slabSize, this));
+                        MemorySlab newSlab;
+                        try
+                        {
+                            newSlab = new MemorySlab(slabSize, this);
+                        }
+                        catch(OutOfMemoryException)
+                        {
+                            //Free all currently allocated blocks to avoid a situation where blocks are allocated but caller is unaware and can't deallocate them.
+                            for (int b = 0; b < allocatedBlocks.Count; b++)
+                            {
+                                allocatedBlocks[b].Slab.Free(allocatedBlocks[b]);
+                            }
+
+                            throw;
+                        }
+                        slabs.Add(newSlab);
                     }
                 }
 
             }
 
-            var newBuffer = new ManagedBuffer(allocatedBlock);
+            var newBuffer = new ManagedBuffer(allocatedBlocks.ToArray());
             if (filledWith != null) newBuffer.FillWith(filledWith);
             return newBuffer;
         }
@@ -523,7 +704,7 @@ namespace ServerToolkit.BufferManagement
                 if (emptySlabsCount > InitialSlabs) //There should be at least 1+initial slabs empty slabs before one is removed
                 {
                     //TODO: MULTI-SLAB: Consider freeing all free slabs that exceed the initial slabs count
-                    //'cos a buffer can span several slabs and can actually free multiple slabs instanttly.
+                    //'cos a buffer can span several slabs and can actually free multiple slabs instantly.
 
                     //remove the last empty one
                     slabs.RemoveAt(lastemptySlab);
@@ -535,27 +716,56 @@ namespace ServerToolkit.BufferManagement
         }
 
         /// <summary>
-        /// Helper method that searches for free block in an array of slabs and returns the allocated block
+        /// Helper method that searches for free blocks in an array of slabs and returns allocated blocks
         /// </summary>
-        /// <param name="length">Requested length of memory block</param>
+        /// <param name="totalLength">Requested total length of all memory blocks</param>
+        /// <param name="maxBlocks">Maximum number of memory blocks to allocate</param>
         /// <param name="slabs">Array of slabs to search</param>
-        /// <param name="allocatedBlock">Allocated memory block</param>
+        /// <param name="allocatedBlocks">Allocated memory block</param>
         /// <returns>True if memory block was successfully allocated. False, if otherwise</returns>
-        private static bool TryAllocateBlockInSlabs(long length, IMemorySlab[] slabs, out IMemoryBlock allocatedBlock)
+        private static long TryAllocateBlocksInSlabs(long totalLength, int maxBlocks, IMemorySlab[] slabs, out List<IMemoryBlock> allocatedBlocks)
         {
-            allocatedBlock = null;
-            for (int i = 0; i < slabs.Length; i++)
-            {
-                if (slabs[i].LargestFreeBlockSize >= length)
-                {
-                    if (slabs[i].TryAllocate(length, out allocatedBlock))
-                    {
-                        return true;
-                    }
-                }
-            }
+            allocatedBlocks = new List<IMemoryBlock>();
 
-            return false;
+            long minBlockSize;
+            long allocatedSizeTally = 0;
+
+            long largest;
+            long reqLength;
+            IMemoryBlock allocdBlock;
+            //TODO: Figure out how to do this math without involving floating point arithmetic
+            minBlockSize = (long)Math.Ceiling(totalLength / (float)maxBlocks);
+            do
+            {
+                allocdBlock = null;
+                for (int i = 0; i < slabs.Length; i++)
+                {
+                    largest = slabs[i].LargestFreeBlockSize;
+                    if (largest >= (totalLength - allocatedSizeTally) || largest >= minBlockSize)
+                    {
+                        //Figure out what length to request for
+                        reqLength = largest >= (totalLength - allocatedSizeTally) ? (totalLength - allocatedSizeTally) : largest;
+
+                        if (slabs[i].TryAllocate(reqLength, out allocdBlock))
+                        {
+                            allocatedBlocks.Add(allocdBlock);
+                            allocatedSizeTally += reqLength;
+
+                            if (allocatedSizeTally == totalLength) return allocatedSizeTally;
+
+                            //Calculate the new minimum block size
+                            //TODO: Figure out how to do this math without involving floating point arithmetic
+                            minBlockSize = (long)Math.Ceiling((totalLength - allocatedSizeTally) / (float)(maxBlocks - allocatedBlocks.Count));
+
+                            //Scan again from start because there is a chance the smaller minimum block size exists in previously skipped slabs
+                            break;
+                        }
+                    }
+
+                }
+            } while (allocdBlock != null);
+
+            return allocatedSizeTally;
         }
 
     }

@@ -127,7 +127,7 @@ namespace ServerToolkit.BufferManagement.Tests
             foreach (var grp in orderedGroups)
             {
                 var orderedList = grp.OrderBy(o => o.GetSegments()[0].Offset).ToList();
-                Assert.AreEqual(orderedList[0].GetSegments()[0].Offset, 0);
+                Assert.AreEqual(0, orderedList[0].GetSegments()[0].Offset);
                 for (int i = 1; i < orderedList.Count; i++)
                 {
                     Assert.IsTrue(

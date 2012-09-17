@@ -79,7 +79,7 @@ namespace ServerToolkit.BufferManagement.Tests
             IMemoryBlock allocatedMemoryBlock;
             Slab.TryAllocate(blockSize, out allocatedMemoryBlock);
 
-            ManagedBuffer target = new ManagedBuffer(allocatedMemoryBlock);
+            ManagedBuffer target = new ManagedBuffer(new IMemoryBlock[] { allocatedMemoryBlock });
             return target;
         }
 
@@ -106,12 +106,24 @@ namespace ServerToolkit.BufferManagement.Tests
         ///A test for ManagedBuffer Constructor
         ///</summary>
         [TestMethod()]
-        [Description("Construction with null AllocatedMemoryBlock throws exception")]
+        [Description("Construction with null AllocatedMemoryBlocks throws exception")]
         [ExpectedException(typeof(ArgumentNullException))]
         public void BufferConstructorTest()
         {
-            IMemoryBlock nullSlab = null;
-            ManagedBuffer target = new ManagedBuffer(nullSlab);
+            IMemoryBlock[] nullBlocks = null;
+            ManagedBuffer target = new ManagedBuffer(nullBlocks);
+        }
+
+        /// <summary>
+        ///A test for ManagedBuffer Constructor
+        ///</summary>
+        [TestMethod()]
+        [Description("Construction with empty AllocatedMemoryBlocks throws exception")]
+        [ExpectedException(typeof(ArgumentException))]
+        public void BufferConstructorTest2()
+        {
+            IMemoryBlock[] emptyBlocks = new IMemoryBlock[0];
+            ManagedBuffer target = new ManagedBuffer(emptyBlocks);
         }
 
         /// <summary>
@@ -389,6 +401,10 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("ArraySegment returned by GetArraySegment(int,int) is accurate")]
         public void GetArraySegmentTest()
         {
+            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
+            Assert.Fail("Needs to be rewritten");
+
+            /*
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
             int Offset = 0;
@@ -415,7 +431,7 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
-
+            */
 
         }
 
@@ -427,6 +443,10 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("ArraySegment returned by GetArraySegment(int,int) for zero lengths is accurate")]
         public void GetArraySegmentTest2()
         {
+            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
+            Assert.Fail("Needs to be rewritten");
+
+            /*
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
             int Offset = 0;
@@ -436,7 +456,7 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
-
+            */
         }
 
 
@@ -476,6 +496,10 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("ArraySegment returned by GetArraySegment(int) is accurate")]
         public void GetArraySegmentTest5()
         {
+            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
+            Assert.Fail("Needs to be rewritten");
+
+            /*
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
             int Length = (int)(blockSize - 1);
@@ -491,6 +515,7 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
             Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
+             */
 
         }
 
@@ -502,6 +527,10 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("ArraySegment returned by GetArraySegment(int) for zero lengths is accurate")]
         public void GetArraySegmentTest6()
         {
+            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
+            Assert.Fail("Needs to be rewritten");
+            
+            /*
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
             int Length = 0;
@@ -509,7 +538,8 @@ namespace ServerToolkit.BufferManagement.Tests
             actual = target.GetSegments(Length)[0];
             Assert.AreEqual<long>(actual.Offset, 0 + target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
+            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
+             */
 
         }
 
@@ -534,6 +564,10 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("ArraySegment returned by GetArraySegment() is accurate")]
         public void GetArraySegmentTest8()
         {
+            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
+            Assert.Fail("Needs to be rewritten");
+
+            /*
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
             ArraySegment<byte> actual;
@@ -541,7 +575,7 @@ namespace ServerToolkit.BufferManagement.Tests
             Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
             Assert.AreEqual<long>(actual.Count, Math.Min(target.Size, int.MaxValue ));
             Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
-
+            */
         }
 
 
