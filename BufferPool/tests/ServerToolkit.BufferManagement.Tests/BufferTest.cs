@@ -1,6 +1,7 @@
 ﻿using ServerToolkit.BufferManagement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Collections.Generic;
 
 namespace ServerToolkit.BufferManagement.Tests
 {
@@ -73,6 +74,7 @@ namespace ServerToolkit.BufferManagement.Tests
             return SourceArray;
         }
 
+        //Gets a single slab buffer
         private static ManagedBuffer GetNewBuffer(IMemorySlab Slab)
         {
 
@@ -82,6 +84,22 @@ namespace ServerToolkit.BufferManagement.Tests
             ManagedBuffer target = new ManagedBuffer(new IMemoryBlock[] { allocatedMemoryBlock });
             return target;
         }
+
+        //Gets a multi slab buffer
+        private static ManagedBuffer GetNewBuffer(IMemorySlab[] Slabs)
+        {
+            List<IMemoryBlock> blockList = new List<IMemoryBlock>();
+            IMemoryBlock allocatedMemoryBlock;
+
+            foreach (var slab in Slabs)
+            {
+                slab.TryAllocate(blockSize, out allocatedMemoryBlock);
+                blockList.Add(allocatedMemoryBlock);
+            }
+
+            ManagedBuffer target = new ManagedBuffer(blockList.ToArray());
+            return target;
+        }        
 
         private bool ArraysMatch(Array array1, Array array2)
         {
@@ -395,43 +413,140 @@ namespace ServerToolkit.BufferManagement.Tests
         }
 
         /// <summary>
-        ///A test for GetArraySegment
+        ///A test for GetSegments
         ///</summary>
         [TestMethod()]
-        [Description("ArraySegment returned by GetArraySegment(int,int) is accurate")]
-        public void GetArraySegmentTest()
+        [Description("ArraySegments returned by GetArraySegment(int,int) is accurate")]
+        public void GetSegmentsTest()
         {
-            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
-            Assert.Fail("Needs to be rewritten");
+            //Single Slab tests:
 
-            /*
-            MemorySlab slab = new MemorySlab(blockSize * 3, null);
-            ManagedBuffer target = GetNewBuffer(slab);
-            int Offset = 0;
-            int Length = (int)(blockSize - 1);
-            ArraySegment<byte> actual;
-            actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
+            {
+                MemorySlab slab = new MemorySlab(blockSize * 3, null);
+                ManagedBuffer target = GetNewBuffer(slab);
+                int Offset = 0;
+                int Length = (int)(blockSize - 1);
+                ArraySegment<byte> actual;
+                actual = target.GetSegments(Offset, Length)[0];
+                Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks[0].StartLocation);
+                Assert.AreEqual<long>(actual.Count, Length);
+                Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks[0].Slab.Array);
 
-            //Test for full blocksize
-            Offset = 0;
-            Length = (int)blockSize;
-            actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
+                //Test for full blocksize
+                Offset = 0;
+                Length = (int)blockSize;
+                actual = target.GetSegments(Offset, Length)[0];
+                Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks[0].StartLocation);
+                Assert.AreEqual<long>(actual.Count, Length);
+                Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks[0].Slab.Array);
 
 
-            //Test for offset of 1
-            Offset = 1;
-            Length = (int)(blockSize - 1);
-            actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
-            */
+                //Test for offset of 1
+                Offset = 1;
+                Length = (int)(blockSize - 1);
+                actual = target.GetSegments(Offset, Length)[0];
+                Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks[0].StartLocation);
+                Assert.AreEqual<long>(actual.Count, Length);
+                Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks[0].Slab.Array);
+            }
+
+            //Multi-Slab tests:
+
+            {
+                MemorySlab[] slabs = { new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null) };
+                ManagedBuffer target = GetNewBuffer(slabs);
+                int Offset = 0;
+                int Length = (int)(blockSize - 1);
+                var actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array,actual[0].Array);
+
+                //Test for full blocksize
+                Offset = 0;
+                Length = (int)blockSize;
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+
+
+                //Test for offset of 1
+                Offset = 1;
+                Length = (int)(blockSize - 1);
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+
+                //Test that offset of 1 plus blocksize flows into another segment
+                Offset = 1;
+                Length = (int)(blockSize);
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(1, actual[1].Count); 
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+                //Test that offset of 1 plus (blocksize * 2) - 2 stays in two segments
+                Offset = 1;
+                Length = (int)(blockSize * 2 - 2);
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(blockSize - 1, actual[1].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+                //Test that offset of 1 plus (blocksize * 2) - 1 stays in two segments
+                Offset = 1;
+                Length = (int)(blockSize * 2 - 1);
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(blockSize, actual[1].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+                //Test that offset of 0 plus (blocksize * 2) stays in two segments
+                Offset = 0;
+                Length = (int)(blockSize * 2);
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(blockSize, actual[1].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+
+                //Test that offset of 1 plus (blocksize * 2) flows into the third segment
+                Offset = 1;
+                Length = (int)(blockSize * 2);
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(3, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[2].StartLocation, actual[2].Offset);
+                Assert.AreEqual(1, actual[2].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count + actual[2].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[2].Slab.Array, actual[2].Array);
+
+
+            }
 
         }
 
@@ -441,22 +556,52 @@ namespace ServerToolkit.BufferManagement.Tests
         ///</summary>
         [TestMethod()]
         [Description("ArraySegment returned by GetArraySegment(int,int) for zero lengths is accurate")]
-        public void GetArraySegmentTest2()
+        public void GetSegmentsTest2()
         {
-            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
-            Assert.Fail("Needs to be rewritten");
 
-            /*
-            MemorySlab slab = new MemorySlab(blockSize * 3, null);
-            ManagedBuffer target = GetNewBuffer(slab);
-            int Offset = 0;
-            int Length = 0;
-            ArraySegment<byte> actual;
-            actual = target.GetSegments(Offset, Length)[0];
-            Assert.AreEqual<long>(actual.Offset, Offset + target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
-            */
+            //Single Slab test
+            {
+                MemorySlab slab = new MemorySlab(blockSize * 3, null);
+                ManagedBuffer target = GetNewBuffer(slab);
+                int Offset = 0;
+                int Length = 0;
+                var actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual<int>(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+
+                //Test again at a different offset
+                Offset = 10;
+                Length = 0;
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual<int>(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+            }
+
+            //Multi slab test:
+            {
+                MemorySlab[] slabs = { new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null) };
+                ManagedBuffer target = GetNewBuffer(slabs);
+                int Offset = 0;
+                int Length = 0;
+                var actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+
+                //Test again at a different offset
+                Offset = 10;
+                Length = 0;
+                actual = target.GetSegments(Offset, Length);
+                Assert.AreEqual<int>(1, actual.Count);
+                Assert.AreEqual<long>(Offset + target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+            }
         }
 
 
@@ -466,7 +611,7 @@ namespace ServerToolkit.BufferManagement.Tests
         [TestMethod()]
         [Description("GetArraySegment(int,int) with -1 offset parameter throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
-        public void GetArraySegmentTest3()
+        public void GetSegmentsTest3()
         {
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
@@ -479,7 +624,7 @@ namespace ServerToolkit.BufferManagement.Tests
         [TestMethod()]
         [Description("GetArraySegment(int,int) fwith -1 length parameter throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
-        public void GetArraySegmentTest4()
+        public void GetSegmentsTest4()
         {
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
@@ -494,28 +639,96 @@ namespace ServerToolkit.BufferManagement.Tests
         ///</summary>
         [TestMethod()]
         [Description("ArraySegment returned by GetArraySegment(int) is accurate")]
-        public void GetArraySegmentTest5()
+        public void GetSegmentsTest5()
         {
-            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
-            Assert.Fail("Needs to be rewritten");
 
-            /*
-            MemorySlab slab = new MemorySlab(blockSize * 3, null);
-            ManagedBuffer target = GetNewBuffer(slab);
-            int Length = (int)(blockSize - 1);
-            ArraySegment<byte> actual;
-            actual = target.GetSegments(Length)[0];
-            Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
+            //Single slab test:
+            {
+                MemorySlab slab = new MemorySlab(blockSize * 3, null);
+                ManagedBuffer target = GetNewBuffer(slab);
+                int Length = (int)(blockSize - 1);
+                var actual = target.GetSegments(Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
 
-            //Test again for full blocksize
-            Length = (int)(blockSize - 1);
-            actual = target.GetSegments(Length)[0];
-            Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array); 
-             */
+                //Test again for full blocksize
+                Length = (int)(blockSize);
+                actual = target.GetSegments(Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(actual[0].Offset, target.MemoryBlocks[0].StartLocation);
+                Assert.AreEqual<long>(actual[0].Count, Length);
+                Assert.AreEqual<byte[]>(actual[0].Array, target.MemoryBlocks[0].Slab.Array);
+            }
+
+            //Multi slab test:
+            {
+                MemorySlab[] slabs = { new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null) };
+                ManagedBuffer target = GetNewBuffer(slabs);
+                int Length = (int)(blockSize - 1);
+                var actual = target.GetSegments(Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+
+                //Test for full blocksize
+                Length = (int)blockSize;
+                actual = target.GetSegments(Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+
+                //Test that blocksize plus 1 flows into another segment
+                Length = (int)(blockSize + 1);
+                actual = target.GetSegments(Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(1, actual[1].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+                //Test that (blocksize * 2) - 1 stays in two segments
+                Length = (int)(blockSize * 2 - 1);
+                actual = target.GetSegments(Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(blockSize - 1, actual[1].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+                //Test that (blocksize * 2) stays in two segments
+                Length = (int)(blockSize * 2);
+                actual = target.GetSegments(Length);
+                Assert.AreEqual(2, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual(blockSize, actual[1].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+
+                //Test that (blocksize * 2) + 1 flows into the third segment
+                Length = (int)(blockSize * 2 + 1);
+                actual = target.GetSegments(Length);
+                Assert.AreEqual(3, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[2].StartLocation, actual[2].Offset);
+                Assert.AreEqual(1, actual[2].Count);
+                Assert.AreEqual<long>(Length, actual[0].Count + actual[1].Count + actual[2].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[2].Slab.Array, actual[2].Array);
+
+
+            }
 
         }
 
@@ -525,21 +738,31 @@ namespace ServerToolkit.BufferManagement.Tests
         ///</summary>
         [TestMethod()]
         [Description("ArraySegment returned by GetArraySegment(int) for zero lengths is accurate")]
-        public void GetArraySegmentTest6()
+        public void GetSegmentsTest6()
         {
-            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
-            Assert.Fail("Needs to be rewritten");
-            
-            /*
-            MemorySlab slab = new MemorySlab(blockSize * 3, null);
-            ManagedBuffer target = GetNewBuffer(slab);
-            int Length = 0;
-            ArraySegment<byte> actual;
-            actual = target.GetSegments(Length)[0];
-            Assert.AreEqual<long>(actual.Offset, 0 + target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Length);
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
-             */
+            //Single slab test:
+            {
+                MemorySlab slab = new MemorySlab(blockSize * 3, null);
+                ManagedBuffer target = GetNewBuffer(slab);
+                int Length = 0;
+                var actual = target.GetSegments(Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+            }
+
+            //Multi slab test:
+            {
+                MemorySlab[] slabs = { new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null) };
+                ManagedBuffer target = GetNewBuffer(slabs);
+                int Length = 0;
+                var actual = target.GetSegments(Length);
+                Assert.AreEqual(1, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(Length, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+            }
 
         }
 
@@ -547,7 +770,7 @@ namespace ServerToolkit.BufferManagement.Tests
         [TestMethod()]
         [Description("GetArraySegment(int,int) with -1 length parameter throws exception")]
         [ExpectedException(typeof(ArgumentOutOfRangeException))]
-        public void GetArraySegmentTest7()
+        public void GetSegmentsTest7()
         {
             MemorySlab slab = new MemorySlab(blockSize * 3, null);
             ManagedBuffer target = GetNewBuffer(slab);
@@ -562,20 +785,35 @@ namespace ServerToolkit.BufferManagement.Tests
         ///</summary>
         [TestMethod()]
         [Description("ArraySegment returned by GetArraySegment() is accurate")]
-        public void GetArraySegmentTest8()
+        public void GetSegmentsTest8()
         {
-            //TODO: Look into this test -- Make sure it passes the original single slab buffer test, write another test for multi-slab buffer
-            Assert.Fail("Needs to be rewritten");
 
-            /*
-            MemorySlab slab = new MemorySlab(blockSize * 3, null);
-            ManagedBuffer target = GetNewBuffer(slab);
-            ArraySegment<byte> actual;
-            actual = target.GetSegments()[0];
-            Assert.AreEqual<long>(actual.Offset, target.MemoryBlocks.StartLocation);
-            Assert.AreEqual<long>(actual.Count, Math.Min(target.Size, int.MaxValue ));
-            Assert.AreEqual<byte[]>(actual.Array, target.MemoryBlocks.Slab.Array);
-            */
+            //Single slab test:
+            {
+                MemorySlab slab = new MemorySlab(blockSize * 3, null);
+                ManagedBuffer target = GetNewBuffer(slab);
+                var actual = target.GetSegments();
+                Assert.AreEqual<int>(1, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.Size, actual[0].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+            }
+
+            //Multi slab test:
+            {
+                MemorySlab[] slabs = { new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null), new MemorySlab(blockSize * 2, null) };
+                ManagedBuffer target = GetNewBuffer(slabs);
+                var actual = target.GetSegments();
+                Assert.AreEqual(3, actual.Count);
+                Assert.AreEqual<long>(target.MemoryBlocks[0].StartLocation, actual[0].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[1].StartLocation, actual[1].Offset);
+                Assert.AreEqual<long>(target.MemoryBlocks[2].StartLocation, actual[2].Offset);
+                Assert.AreEqual<long>(target.Size, actual[0].Count + actual[1].Count + actual[2].Count);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[0].Slab.Array, actual[0].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[1].Slab.Array, actual[1].Array);
+                Assert.AreEqual<byte[]>(target.MemoryBlocks[2].Slab.Array, actual[2].Array);
+
+            }
         }
 
 

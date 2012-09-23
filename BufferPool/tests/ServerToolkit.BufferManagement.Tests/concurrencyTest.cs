@@ -26,7 +26,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 //for a total allocation of 31457100 bytes.
                 //If everything goes well there will be no overlap in allocated buffers
                 //and there'll be no free space greater than 314574 (the lower number) on total slabs - 1
-                //and slabs should be 4
+                //and slabs should be 3 or 4.
 
                 List<IBuffer> bufferList = new List<IBuffer>();
 
@@ -43,26 +43,35 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("HundredGetBuffers times thirty")]
         public void ThreeThousandGetBuffers()
         {
-                BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
+            try
+            {
+                System.Runtime.MemoryFailPoint memCheck = new System.Runtime.MemoryFailPoint(3000 + 1500); //Thread memory + pool memory
+            }
+            catch (InsufficientMemoryException) 
+            {
+                Assert.Inconclusive("There is not enough memory on the system to run this test");
+            }
 
-                //PLAN:
-                //Just like HundredGetBuffers but with 3000 threads
+            BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
 
-                List<IBuffer> bufferList = new List<IBuffer>();
+            //PLAN:
+            //Just like HundredGetBuffers but with 3000 threads
 
-                int threadNumber = 3000;
-                int sizeOdd = 524288;
-                int sizeEven = 524288;
+            List<IBuffer> bufferList = new List<IBuffer>();
 
-                AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
-                AssertIsContiguous(bufferList);
-                Assert.IsTrue(pool.SlabCount == 150 || pool.SlabCount == 151, "SlabCount is " + pool.SlabCount + ". Was expecting 150 or 151");
+            int threadNumber = 3000;
+            int sizeOdd = 524288;
+            int sizeEven = 524288;
+
+            AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
+            AssertIsContiguous(bufferList);
+            Assert.IsTrue(pool.SlabCount == 150, "SlabCount is " + pool.SlabCount + ". Was expecting 150");
 
         }
 
 
         [TestMethod]
-        [Description("Runs HundredGetBuffers 50 times")]
+        [Description("Runs HundredGetBuffers 50 times. This test is necessary to sleuth out subtle bugs that will not be found by HundredGetBuffers")]
         public void LongRunningHundredGetBuffers()
         {
             for (int count = 0; count < 50; count++)
@@ -87,9 +96,8 @@ namespace ServerToolkit.BufferManagement.Tests
                     //wait for signal
                     mre.WaitOne();
 
-                    //Aquire buffer
                     IBuffer buff = pool.GetBuffer(size);
-
+                                           
                     //Add to Queue
                     lock (bufferList_sync)
                     {
@@ -118,20 +126,20 @@ namespace ServerToolkit.BufferManagement.Tests
 
 
 
-        //verify that all buffers referencing the same array are contiguous i.e no overlap
+        //verify that all buffers referencing the same array are contiguous i.e no overlap or gap.
         private static void AssertIsContiguous(List<IBuffer> bufferList)
         {
 
-            var orderedGroups = bufferList.GroupBy(o => o.GetSegments()[0].Array);
+            var segmentSlabGroups = bufferList.SelectMany( b => b.GetSegments()).GroupBy(o => o.Array);
 
-            foreach (var grp in orderedGroups)
+            foreach (var grp in segmentSlabGroups)
             {
-                var orderedList = grp.OrderBy(o => o.GetSegments()[0].Offset).ToList();
-                Assert.AreEqual(0, orderedList[0].GetSegments()[0].Offset);
+                var orderedList = grp.OrderBy(o => o.Offset).ToList();
+                Assert.AreEqual(0, orderedList[0].Offset);
                 for (int i = 1; i < orderedList.Count; i++)
                 {
                     Assert.IsTrue(
-                        orderedList[i].GetSegments()[0].Offset == orderedList[i - 1].GetSegments()[0].Offset + orderedList[i - 1].GetSegments()[0].Count
+                        orderedList[i].Offset == orderedList[i - 1].Offset + orderedList[i - 1].Count
                         );
                 }
             }

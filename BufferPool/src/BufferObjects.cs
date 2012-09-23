@@ -184,13 +184,13 @@ namespace ServerToolkit.BufferManagement
                     if (block.Length >= (length - totalLength))
                     {
                         //Block can hold the remainder of desired length
-                        result.Add(new ArraySegment<byte>(block.Slab.Array, 0, (int)(length - totalLength)));
+                        result.Add(new ArraySegment<byte>(block.Slab.Array, (int)(block.StartLocation), (int)(length - totalLength)));
                         return result;
                     }
                     else
                     {
                         //Block can only hold only part of the remainder of desired length
-                        result.Add(new ArraySegment<byte>(block.Slab.Array, 0, (int)block.Length));
+                        result.Add(new ArraySegment<byte>(block.Slab.Array, (int)(block.StartLocation), (int)block.Length));
                         totalLength += block.Length;
                     }
 
