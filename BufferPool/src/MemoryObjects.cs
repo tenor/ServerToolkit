@@ -113,7 +113,7 @@ namespace ServerToolkit.BufferManagement
         private SortedDictionary<long, SortedDictionary<long, IMemoryBlock>> freeBlocksList = new SortedDictionary<long, SortedDictionary<long, IMemoryBlock>>();
         private object sync = new object();
 
-        private long largest = 0;
+        private long largest;
         private byte[] array;
 
         /// <summary>
@@ -147,7 +147,7 @@ namespace ServerToolkit.BufferManagement
                 IMemoryBlock first;
                 if (!dictStartLoc.TryGetValue(0, out first))
                 {
-                    AddFreeBlock(0, size);
+                    AddFreeBlock(0, size, false);
                     this.slabSize = size;
                     this.pool = pool;
                     // GC.Collect(); //Perform Garbage Collection before creating large array -- commented out but may be useful
@@ -194,26 +194,55 @@ namespace ServerToolkit.BufferManagement
         /// <returns>True, if memory block was allocated. False, if otherwise</returns>
         public bool TryAllocate(long length, out IMemoryBlock allocatedBlock)
         {
+            return TryAllocate(length, length, out allocatedBlock) > 0;
+        }
+
+        /// <summary>
+        /// Attempts to allocate a memory block of length between minLength and maxLength (both inclusive)
+        /// </summary>
+        /// <param name="minLength">The minimum acceptable length</param>
+        /// <param name="maxLength">The maximum acceptable length</param>
+        /// <param name="allocatedBlock">Allocated memory block</param>
+        /// <returns>Length of allocated block if successful, zero otherwise</returns>
+        /// <remarks>This overload is useful when multiple threads are concurrently working on the slab and the caller wants to allocate a block up to a desired size</remarks>
+        public long TryAllocate(long minLength, long maxLength, out IMemoryBlock allocatedBlock)
+        {
+            if (minLength > maxLength) throw new ArgumentException("minLength is greater than maxLength", "minLength");
+
             allocatedBlock = null;
             lock (sync)
             {
-                if (GetLargest() < length) return false;
+                if (freeBlocksList.Count == 0) return 0;
 
-                //search freeBlocksList looking for the smallest available free block
                 long[] keys = new long[freeBlocksList.Count];
                 freeBlocksList.Keys.CopyTo(keys, 0);
-                int index = System.Array.BinarySearch<long>(keys, length);
+
+                //Leave if the largest free block cannot hold minLength
+                if (keys[keys.LongLength - 1] < minLength)
+                {
+                    return 0;
+                }
+
+                //search freeBlocksList looking for the smallest available free block than can fit maxLength
+                long length = maxLength;
+                int index = System.Array.BinarySearch<long>(keys, maxLength);
                 if (index < 0)
                 {
                     index = ~index;
-                    if (index >= keys.LongLength)
+                    if (index >= keys.Length)
                     {
-                        return false;
+                        //index is set to the largest free block which can hold minLength
+                        index = keys.Length - 1;
+
+                        //length is set to the size of that free block
+                        length = keys[index];
                     }
                 }
 
+
                 //Grab the first memoryblock in the freeBlockList innerSortedDictionary
                 //There is guanranteed to be an innerSortedDictionary with at least 1 key=value pair
+                //TODO: Simplify this
                 IMemoryBlock foundBlock = null;
                 foreach (KeyValuePair<long, IMemoryBlock> pair in freeBlocksList[keys[index]])
                 {
@@ -221,32 +250,31 @@ namespace ServerToolkit.BufferManagement
                     break;
                 }
 
-                //Remove existing free block
-                RemoveFreeBlock(foundBlock);
 
 
                 if (foundBlock.Length == length)
                 {
-                    //Perfect match
+                    //Perfect match:
+
+                    //Remove existing free block
+                    RemoveFreeBlock(foundBlock);
+
                     allocatedBlock = foundBlock;
                 }
                 else
                 {
                     //FoundBlock is larger than requested block size
 
+                    //Shrink the existing free memory block by the new allocation
+                    ShrinkFreeMemoryBlock(foundBlock, foundBlock.Length - length);
+
                     allocatedBlock = new MemoryBlock(foundBlock.StartLocation, length, this);
 
-                    long newFreeStartLocation = allocatedBlock.EndLocation + 1;
-                    long newFreeSize = foundBlock.Length - length;
-
-                    //add new Freeblock with the smaller remaining space
-                    AddFreeBlock(newFreeStartLocation, newFreeSize);
 
                 }
 
+                return length;
             }
-
-            return true;
 
         }
 
@@ -297,7 +325,7 @@ namespace ServerToolkit.BufferManagement
                 }
 
                 //Mark entire contiguous block as free
-                AddFreeBlock(newFreeStartLocation.Value, newFreeSize);
+                AddFreeBlock(newFreeStartLocation.Value, newFreeSize, false);
 
             }
 
@@ -320,8 +348,8 @@ namespace ServerToolkit.BufferManagement
         {
             if (is64BitMachine)
             {
-                //largest = Value;
-                Interlocked.Exchange(ref largest, value);
+                largest = value;
+                //Interlocked.Exchange(ref largest, value);
             }
             else
             {
@@ -335,7 +363,9 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="startLocation">Offset of block in slab</param>
         /// <param name="length">Length of block</param>
-        private void AddFreeBlock(long startLocation, long length)
+        /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
+        /// <remarks>Set suppressSetLargest when the caller wants to set the LargestFreeBlockSize after this method is called</remarks>
+        private void AddFreeBlock(long startLocation, long length, bool suppressSetLargest)
         {
             SortedDictionary<long, IMemoryBlock> innerList;
             if (!freeBlocksList.TryGetValue(length, out innerList))
@@ -348,41 +378,69 @@ namespace ServerToolkit.BufferManagement
             innerList.Add(startLocation, newFreeBlock);
             dictStartLoc.Add(startLocation, newFreeBlock);
             dictEndLoc.Add(startLocation + length - 1, newFreeBlock);
-            if (GetLargest() < length)
+            if (!suppressSetLargest && GetLargest() < length)
             {
                 SetLargest(length);
             }
         }
 
+        
         /// <summary>
         /// Marks an unallocated contiguous block as allocated
         /// </summary>
         /// <param name="block">newly allocated block</param>
         private void RemoveFreeBlock(IMemoryBlock block)
         {
+            ShrinkFreeMemoryBlock(block, 0);
+        }
+
+
+        /// <summary>
+        /// Marks an unallocated contiguous block as allocated, and then marks an allocated block as unallocated
+        /// </summary>
+        /// <param name="block">newly allocated block</param>
+        /// <param name="shrinkTo">The length of the smaller free memory block</param>
+        private void ShrinkFreeMemoryBlock(IMemoryBlock block, long shrinkTo)
+        {
+            System.Diagnostics.Debug.Assert(shrinkTo <= block.Length);
+            System.Diagnostics.Debug.Assert(shrinkTo >= 0 );
+
             dictStartLoc.Remove(block.StartLocation);
             dictEndLoc.Remove(block.EndLocation);
+
+            bool calcLargest = false;
             if (freeBlocksList[block.Length].Count == 1)
             {
                 freeBlocksList.Remove(block.Length);
                 if (GetLargest() == block.Length)
                 {
-                    //Get the true largest
-                    if (freeBlocksList.Count == 0)
-                    {
-                        SetLargest(0);
-                    }
-                    else
-                    {
-                        long[] indices = new long[freeBlocksList.Count];
-                        freeBlocksList.Keys.CopyTo(indices, 0);
-                        SetLargest(indices[indices.LongLength - 1]);
-                    }
+                    //The largest free block was removed, so there will be a new largest
+                    calcLargest = true;
                 }
             }
             else
             {
                 freeBlocksList[block.Length].Remove(block.StartLocation);
+            }
+
+            if (shrinkTo > 0)
+            {
+                AddFreeBlock(block.StartLocation + (block.Length - shrinkTo), shrinkTo, !calcLargest); 
+            }
+
+            if (calcLargest)
+            {
+                //Get the true largest
+                if (freeBlocksList.Count == 0)
+                {
+                    SetLargest(0);
+                }
+                else
+                {
+                    long[] indices = new long[freeBlocksList.Count];
+                    freeBlocksList.Keys.CopyTo(indices, 0);
+                    SetLargest(indices[indices.LongLength - 1]);
+                }
             }
         }
 
@@ -405,6 +463,5 @@ namespace ServerToolkit.BufferManagement
                 return Interlocked.Read(ref largest);
             }
         }
-
     }
 }

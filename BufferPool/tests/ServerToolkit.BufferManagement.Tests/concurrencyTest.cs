@@ -26,7 +26,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 //for a total allocation of 31457100 bytes.
                 //If everything goes well there will be no overlap in allocated buffers
                 //and there'll be no free space greater than 314574 (the lower number) on total slabs - 1
-                //and slabs should be 3 or 4.
+                //and slabs should be 3.
 
                 List<IBuffer> bufferList = new List<IBuffer>();
 
@@ -36,13 +36,22 @@ namespace ServerToolkit.BufferManagement.Tests
 
                 AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
                 AssertIsContiguous(bufferList);
-                Assert.IsTrue(pool.SlabCount == 3 || pool.SlabCount == 4, "SlabCount is " + pool.SlabCount + ". Was expecting 3 or 4");
+                //TODO:Also Assert that all buffers, both Size and GetSegments().Count are equal to the requested size.
+                Assert.IsTrue(pool.SlabCount == 3, "SlabCount is " + pool.SlabCount + ". Was expecting 3");
         }
 
         [TestMethod]
         [Description("HundredGetBuffers times thirty")]
         public void ThreeThousandGetBuffers()
         {
+            //PLAN:
+            //Just like HundredGetBuffers but with 3000 threads
+
+            /*
+            System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(@"c:\test\myerrors.txt"));
+            System.Diagnostics.Trace.AutoFlush = true;
+             */
+            
             try
             {
                 System.Runtime.MemoryFailPoint memCheck = new System.Runtime.MemoryFailPoint(3000 + 1500); //Thread memory + pool memory
@@ -51,11 +60,8 @@ namespace ServerToolkit.BufferManagement.Tests
             {
                 Assert.Inconclusive("There is not enough memory on the system to run this test");
             }
-
+             
             BufferPool pool = new BufferPool(10 * 1024 * 1024, 1, 1);
-
-            //PLAN:
-            //Just like HundredGetBuffers but with 3000 threads
 
             List<IBuffer> bufferList = new List<IBuffer>();
 
@@ -65,6 +71,7 @@ namespace ServerToolkit.BufferManagement.Tests
 
             AquireBuffersConcurrently(pool, bufferList, threadNumber, sizeOdd, sizeEven);
             AssertIsContiguous(bufferList);
+            //TODO:Also Assert that all buffers, both Size and GetSegments().Count are equal to the requested size.
             Assert.IsTrue(pool.SlabCount == 150, "SlabCount is " + pool.SlabCount + ". Was expecting 150");
 
         }
@@ -74,6 +81,11 @@ namespace ServerToolkit.BufferManagement.Tests
         [Description("Runs HundredGetBuffers 50 times. This test is necessary to sleuth out subtle bugs that will not be found by HundredGetBuffers")]
         public void LongRunningHundredGetBuffers()
         {
+            /*
+            System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(@"c:\test\myerrors.txt"));
+            System.Diagnostics.Trace.AutoFlush = true;
+             */
+
             for (int count = 0; count < 50; count++)
             {
                 HundredGetBuffers();
@@ -91,17 +103,28 @@ namespace ServerToolkit.BufferManagement.Tests
             {
                 Thread thread = new Thread(delegate(object number)
                 {
-                    var size = ((int)number % 2 == 1 ? sizeOdd : sizeEven);
-
-                    //wait for signal
-                    mre.WaitOne();
-
-                    IBuffer buff = pool.GetBuffer(size);
-                                           
-                    //Add to Queue
-                    lock (bufferList_sync)
+                    try
                     {
-                        bufferList.Add(buff);
+                        var size = ((int)number % 2 == 1 ? sizeOdd : sizeEven);
+
+                        //wait for signal
+                        mre.WaitOne();
+
+                        IBuffer buff = pool.GetBuffer(size);
+
+                        //Add to Queue
+                        lock (bufferList_sync)
+                        {
+                            bufferList.Add(buff);
+                        }
+                    }
+                    catch(Exception e) 
+                    {
+
+                        System.Diagnostics.Trace.WriteLine("=================\r\nThread " + number + ", " + Thread.CurrentThread.ManagedThreadId + "\r\n\r\n"
+                            + e.GetType() + "\r\n" + e.Message + "\r\n\r\n" + e.StackTrace);
+
+                        throw;
                     }
                 });
 
@@ -122,6 +145,7 @@ namespace ServerToolkit.BufferManagement.Tests
                     Thread.Sleep(500);
                 }
             }
+
         }
 
 
@@ -129,7 +153,6 @@ namespace ServerToolkit.BufferManagement.Tests
         //verify that all buffers referencing the same array are contiguous i.e no overlap or gap.
         private static void AssertIsContiguous(List<IBuffer> bufferList)
         {
-
             var segmentSlabGroups = bufferList.SelectMany( b => b.GetSegments()).GroupBy(o => o.Array);
 
             foreach (var grp in segmentSlabGroups)

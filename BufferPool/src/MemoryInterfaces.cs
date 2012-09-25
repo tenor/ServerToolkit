@@ -76,6 +76,16 @@ namespace ServerToolkit.BufferManagement
         bool TryAllocate(long length, out IMemoryBlock allocatedBlock);
 
         /// <summary>
+        /// Attempts to allocate a memory block of length between minLength and maxLength (both inclusive)
+        /// </summary>
+        /// <param name="minLength">The minimum acceptable length</param>
+        /// <param name="maxLength">The maximum acceptable length</param>
+        /// <param name="allocatedBlock">Allocated memory block</param>
+        /// <returns>Length of allocated block if successful, zero otherwise</returns>
+        /// <remarks>This overload is useful when multiple threads are concurrently working on the slab and the caller wants to allocate a block up to a desired size</remarks>
+        long TryAllocate(long minLength, long maxLength, out IMemoryBlock allocatedBlock);
+
+        /// <summary>
         /// Frees an allocated memory block.
         /// </summary>
         /// <param name="allocatedBlock">Allocated memory block to be freed</param>

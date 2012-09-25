@@ -392,10 +392,17 @@ namespace ServerToolkit.BufferManagement
     /// </summary>
     public sealed class BufferPool : IBufferPool
     {
+        /// <summary>
+        /// The minimum size of a slab.
+        /// </summary>
         public const int MinimumSlabSize = 92160; //90 KB to force slab into LOH
 
         //This restriction is in place because of ArraySegment's (T[], int, int) constructor
         //If a slab exceeds the MaximumSlabSize, an array segment cannot access data beyond the int.MaxValue location
+
+        /// <summary>
+        /// The maximum size of a slab.
+        /// </summary>
         public const long MaximumSlabSize = ((long)int.MaxValue) + 1; 
 
         private readonly IMemorySlab firstSlab;
@@ -574,6 +581,7 @@ namespace ServerToolkit.BufferManagement
                 {
                     allocatedBlocks.AddRange(allocd);
                 }
+
                 if (currentlyAllocdLength == size)
                 {
                     //We got the entire length we are looking for, so leave
@@ -594,12 +602,13 @@ namespace ServerToolkit.BufferManagement
                 }
 
                 List<IMemoryBlock> allocd;
-                long allocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, out allocd);
+                long allocdLength = TryAllocateBlocksInSlabs(size - currentlyAllocdLength, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, out allocd);
                 if (allocdLength > 0)
                 {
                     allocatedBlocks.AddRange(allocd);
                     currentlyAllocdLength += allocdLength;
                 }
+
                 if (currentlyAllocdLength == size)
                 {
                     //found it -- leave
@@ -617,6 +626,7 @@ namespace ServerToolkit.BufferManagement
                         //Unable to find available free space, so create new slab
                         newSlab = new MemorySlab(slabSize, this);
                     }
+                    //TODO: Move catch to cover entire operation
                     catch (OutOfMemoryException)
                     {
                         //Free all currently allocated blocks to avoid a situation where blocks are allocated but caller is unaware and can't deallocate them.
@@ -725,6 +735,7 @@ namespace ServerToolkit.BufferManagement
         /// <returns>True if memory block was successfully allocated. False, if otherwise</returns>
         private static long TryAllocateBlocksInSlabs(long totalLength, int maxBlocks, IMemorySlab[] slabs, out List<IMemoryBlock> allocatedBlocks)
         {
+            //TODO: Make allocatedBlocks a ref parameter.
             allocatedBlocks = new List<IMemoryBlock>();
 
             long minBlockSize;
@@ -741,12 +752,12 @@ namespace ServerToolkit.BufferManagement
                 for (int i = 0; i < slabs.Length; i++)
                 {
                     largest = slabs[i].LargestFreeBlockSize;
-                    if (largest >= (totalLength - allocatedSizeTally) || largest >= minBlockSize)
+                    if (largest >= minBlockSize)
                     {
                         //Figure out what length to request for
-                        reqLength = largest >= (totalLength - allocatedSizeTally) ? (totalLength - allocatedSizeTally) : largest;
+                        reqLength = slabs[i].TryAllocate(minBlockSize, totalLength - allocatedSizeTally, out allocdBlock);
 
-                        if (slabs[i].TryAllocate(reqLength, out allocdBlock))
+                        if (reqLength > 0)
                         {
                             allocatedBlocks.Add(allocdBlock);
                             allocatedSizeTally += reqLength;
