@@ -397,8 +397,8 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         public const int MinimumSlabSize = 92160; //90 KB to force slab into LOH
 
-        //This restriction is in place because of ArraySegment's (T[], int, int) constructor
-        //If a slab exceeds the MaximumSlabSize, an array segment cannot access data beyond the int.MaxValue location
+        /// The MaximumSlabSize restriction is in place because of ArraySegment's (T[], int, int) constructor.
+        /// If a slab exceeds the MaximumSlabSize, an array segment cannot access data beyond the int.MaxValue location
 
         /// <summary>
         /// The maximum size of a slab.
@@ -525,8 +525,8 @@ namespace ServerToolkit.BufferManagement
             //an exception is thrown (when IBuffer.FillWith() is called) before the buffer is returned.
             if (filledWith != null)
             {
-                if (filledWith.LongLength == 0) filledWith = null;
                 if (filledWith.LongLength > size) throw new ArgumentException("Length of filledWith array cannot be larger than desired buffer size");
+                if (filledWith.LongLength == 0) filledWith = null;
 
                 //TODO: Write test that will test that IBuffer.FillWith() doesn't throw an exception (and that buffers aren't allocated) in this method
             }
@@ -538,158 +538,150 @@ namespace ServerToolkit.BufferManagement
             }
 
             List<IMemoryBlock> allocatedBlocks = new List<IMemoryBlock>();
-            IMemorySlab[] slabArr;
-            long currentlyAllocdLength = 0;
 
-            if (GetSingleSlabPool())
+            //TODO: Consider the performance penalty involved in making the try-catch below a constrained region
+            try
             {
-                //Optimization: Chances are that there'll be just one slab in a pool, so access it directly 
-                //and avoid the lock statement involved while creating an array of slabs.
+                IMemorySlab[] slabArr;
+                long currentlyAllocdLength = 0;
 
-                //Note that even if singleSlabPool is inaccurate, this method will still work properly.
-                //The optimization is effective because singleSlabPool will be accurate majority of the time.
-
-                slabArr = new IMemorySlab[] { firstSlab };
-                List<IMemoryBlock> allocd;
-                currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
-                if (currentlyAllocdLength > 0)
+                if (GetSingleSlabPool())
                 {
-                    allocatedBlocks.AddRange(allocd);
+                    //Optimization: Chances are that there'll be just one slab in a pool, so access it directly 
+                    //and avoid the lock statement involved while creating an array of slabs.
+
+                    //Note that even if singleSlabPool is inaccurate, this method will still work properly.
+                    //The optimization is effective because singleSlabPool will be accurate majority of the time.
+
+                    slabArr = new IMemorySlab[] { firstSlab };
+                    List<IMemoryBlock> allocd;
+                    currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
+                    if (currentlyAllocdLength > 0)
+                    {
+                        allocatedBlocks.AddRange(allocd);
+                    }
+
+                    if (currentlyAllocdLength == size)
+                    {
+                        //We got the entire length we are looking for, so leave
+                        var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
+                        if (filledWith != null) buffer.FillWith(filledWith);
+                        return buffer;
+                    }
+
+                    SetSingleSlabPool(false); // Slab count will soon be incremented
+                }
+                else
+                {
+
+                    lock (syncSlabList)
+                    {
+                        slabArr = slabs.ToArray();
+                    }
+
+                    List<IMemoryBlock> allocd;
+                    currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
+                    if (currentlyAllocdLength > 0)
+                    {
+                        allocatedBlocks.AddRange(allocd);
+                    }
+
+                    if (currentlyAllocdLength == size)
+                    {
+                        //We got the entire length we are looking for, so leave
+                        var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
+                        if (filledWith != null) buffer.FillWith(filledWith);
+                        return buffer;
+                    }
                 }
 
-                if (currentlyAllocdLength == size)
+
+                //Try to create new slab
+                lock (syncNewSlab)
                 {
-                    //We got the entire length we are looking for, so leave
-                    var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                    if (filledWith != null) buffer.FillWith(filledWith);
-                    return buffer;
-                }
+                    //Look again for free block
+                    lock (syncSlabList)
+                    {
+                        slabArr = slabs.ToArray();
+                    }
 
-                SetSingleSlabPool(false); // Slab count will soon be incremented
-            }
-            else
-            {
+                    List<IMemoryBlock> allocd;
+                    long allocdLength = TryAllocateBlocksInSlabs(size - currentlyAllocdLength, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, out allocd);
+                    if (allocdLength > 0)
+                    {
+                        allocatedBlocks.AddRange(allocd);
+                        currentlyAllocdLength += allocdLength;
+                    }
 
-                lock (syncSlabList)
-                {
-                    slabArr = slabs.ToArray();
-                }
+                    if (currentlyAllocdLength == size)
+                    {
+                        //found it -- leave
+                        var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
+                        if (filledWith != null) buffer.FillWith(filledWith);
+                        return buffer;
+                    }
 
-                List<IMemoryBlock> allocd;
-                currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
-                if (currentlyAllocdLength > 0)
-                {
-                    allocatedBlocks.AddRange(allocd);
-                }
-
-                if (currentlyAllocdLength == size)
-                {
-                    //We got the entire length we are looking for, so leave
-                    var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                    if (filledWith != null) buffer.FillWith(filledWith);
-                    return buffer;
-                }
-            }
-
-
-            //Try to create new slab
-            lock (syncNewSlab)
-            {
-                //Look again for free block
-                lock (syncSlabList)
-                {
-                    slabArr = slabs.ToArray();
-                }
-
-                List<IMemoryBlock> allocd;
-                long allocdLength = TryAllocateBlocksInSlabs(size - currentlyAllocdLength, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, out allocd);
-                if (allocdLength > 0)
-                {
-                    allocatedBlocks.AddRange(allocd);
-                    currentlyAllocdLength += allocdLength;
-                }
-
-                if (currentlyAllocdLength == size)
-                {
-                    //found it -- leave
-                    var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                    if (filledWith != null) buffer.FillWith(filledWith);
-                    return buffer;
-                }
-
-                List<IMemorySlab> newSlabList = new List<IMemorySlab>();
-                do
-                {
-                    MemorySlab newSlab;
-                    try
+                    List<IMemorySlab> newSlabList = new List<IMemorySlab>();
+                    do
                     {
                         //Unable to find available free space, so create new slab
-                        newSlab = new MemorySlab(slabSize, this);
-                    }
-                    //TODO: Move catch to cover entire operation
-                    catch (OutOfMemoryException)
-                    {
-                        //Free all currently allocated blocks to avoid a situation where blocks are allocated but caller is unaware and can't deallocate them.
-                        for (int i = 0; i < allocatedBlocks.Count; i++)
+                        MemorySlab newSlab = new MemorySlab(slabSize, this);
+
+                        IMemoryBlock allocdBlk;
+                        if (slabSize > size - currentlyAllocdLength)
                         {
-                            allocatedBlocks[i].Slab.Free(allocatedBlocks[i]);
+                            //Allocate remnant
+                            newSlab.TryAllocate(size - currentlyAllocdLength, out allocdBlk);
+                        }
+                        else
+                        {
+                            //Allocate entire slab
+                            newSlab.TryAllocate(slabSize, out allocdBlk);
                         }
 
-                        throw;
+                        newSlabList.Add(newSlab);
+                        allocatedBlocks.Add(allocdBlk);
+                        currentlyAllocdLength += allocdBlk.Length;
+                    }
+                    while (currentlyAllocdLength < size);
+
+                    lock (syncSlabList)
+                    {
+                        //Add new slabs to collection
+                        slabs.AddRange(newSlabList);
+
+                        //Add extra slabs as requested in object properties
+                        for (int i = 0; i < subsequentSlabs - 1; i++)
+                        {
+                            slabs.Add(new MemorySlab(slabSize, this));
+                        }
                     }
 
-                    IMemoryBlock allocdBlk;
-                    if (slabSize > size - currentlyAllocdLength)
-                    {
-                        //Allocate remnant
-                        newSlab.TryAllocate(size - currentlyAllocdLength, out allocdBlk);
-                    }
-                    else
-                    {
-                        //Allocate entire slab
-                        newSlab.TryAllocate(slabSize, out allocdBlk);
-                    }
-
-                    newSlabList.Add(newSlab);
-                    allocatedBlocks.Add(allocdBlk);
-                    currentlyAllocdLength += allocdBlk.Length;
                 }
-                while (currentlyAllocdLength < size);
 
+                //TODO: Create a helper method that creates a buffer and fills it, if filledWith is not null
+                var newBuffer = new ManagedBuffer(allocatedBlocks.ToArray());
+                if (filledWith != null) newBuffer.FillWith(filledWith);
+                return newBuffer;
+            }
+            catch
+            {
+                //OOMs, Thread abort exceptions and other ugly things can happen so roll back any allocated blocks.
+                //This will prevent a limbo situation where those blocks are allocated but caller is unaware and can't deallocate them.
 
+                //NOTE: This try-catch block should not be within a lock as it calls MemorySlab.Free which takes locks,
+                //and in turn calls BufferPool.TryFreeSlabs which takes other locks and can lead to a dead-lock/race condition.
 
-                lock (syncSlabList)
+                //TODO: Write rollback test.
+
+                for (int b = 0; b < allocatedBlocks.Count; b++)
                 {
-                    //Add new slabs to collection
-                    slabs.AddRange(newSlabList);
-
-                    //Add extra slabs as requested in object properties
-                    for (int i = 0; i < subsequentSlabs - 1; i++)
-                    {
-                        MemorySlab newSlab;
-                        try
-                        {
-                            newSlab = new MemorySlab(slabSize, this);
-                        }
-                        catch(OutOfMemoryException)
-                        {
-                            //Free all currently allocated blocks to avoid a situation where blocks are allocated but caller is unaware and can't deallocate them.
-                            for (int b = 0; b < allocatedBlocks.Count; b++)
-                            {
-                                allocatedBlocks[b].Slab.Free(allocatedBlocks[b]);
-                            }
-
-                            throw;
-                        }
-                        slabs.Add(newSlab);
-                    }
+                    allocatedBlocks[b].Slab.Free(allocatedBlocks[b]);
                 }
 
+                throw;
             }
 
-            var newBuffer = new ManagedBuffer(allocatedBlocks.ToArray());
-            if (filledWith != null) newBuffer.FillWith(filledWith);
-            return newBuffer;
         }
 
         /// <summary>
@@ -697,6 +689,8 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         internal void TryFreeSlabs()
         {
+            //TODO: Shouldn't the lock used for adding slabs to the list be held somewhere in here?
+
             lock (syncSlabList)
             {
                 int emptySlabsCount = 0;
@@ -710,7 +704,6 @@ namespace ServerToolkit.BufferManagement
                     }
                 }
 
-                
                 if (emptySlabsCount > InitialSlabs) //There should be at least 1+initial slabs empty slabs before one is removed
                 {
                     //TODO: MULTI-SLAB: Consider freeing all free slabs that exceed the initial slabs count

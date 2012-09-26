@@ -55,6 +55,8 @@ namespace ServerToolkit.BufferManagement
             this.length = length;
             if (slab == null) throw new ArgumentNullException("slab");
             this.owner = slab;
+
+            //TODO: When this class is converted to a struct, consider implementing IComparer, IComparable -- first figure out what sorted dictionary uses those Comparer things for
         }
 
         /// <summary>
@@ -67,6 +69,8 @@ namespace ServerToolkit.BufferManagement
                 return startLoc;
             }
         }
+
+        //TODO: EndLocation should be calculated. It's not referenced as often as start location and length
 
         /// <summary>
         /// Gets the offset in the slab where the memory block ends.
@@ -208,6 +212,8 @@ namespace ServerToolkit.BufferManagement
         public long TryAllocate(long minLength, long maxLength, out IMemoryBlock allocatedBlock)
         {
             if (minLength > maxLength) throw new ArgumentException("minLength is greater than maxLength", "minLength");
+            if (minLength <= 0) throw new ArgumentOutOfRangeException("minLength must be greater than zero", "minLength");
+            if (maxLength <= 0) throw new ArgumentOutOfRangeException("maxLength must be greater than zero", "maxLength");
 
             allocatedBlock = null;
             lock (sync)
@@ -256,8 +262,8 @@ namespace ServerToolkit.BufferManagement
                 {
                     //Perfect match:
 
-                    //Remove existing free block
-                    RemoveFreeBlock(foundBlock);
+                    //Remove existing free block -- and set Largest if need be
+                    RemoveFreeBlock(foundBlock, false);
 
                     allocatedBlock = foundBlock;
                 }
@@ -285,9 +291,11 @@ namespace ServerToolkit.BufferManagement
         /// <remarks>This method does not verify if the allocatedBlock is indeed from this slab. Callers should make sure that the allocatedblock belongs to the right slab.</remarks>
         public void Free(IMemoryBlock allocatedBlock)
         {
+            //NOTE: This method can call the pool to do some cleanup (which holds locks), therefore do not call this method from within any lock
+            //Or you'll get into a deadlock.
+
             lock (sync)
             {
-
                 //Attempt to coalesce/merge free blocks around the allocateblock to be freed.
                 long? newFreeStartLocation = null;
                 long newFreeSize = 0;
@@ -300,10 +308,10 @@ namespace ServerToolkit.BufferManagement
                     IMemoryBlock blockBefore;
                     if (dictEndLoc.TryGetValue(allocatedBlock.StartLocation - 1, out blockBefore))
                     {
-                        //Yup, so delete it
+                        //Yup, so remove the free block
                         newFreeStartLocation = blockBefore.StartLocation;
                         newFreeSize += blockBefore.Length;
-                        RemoveFreeBlock(blockBefore);
+                        RemoveFreeBlock(blockBefore, true);
                     }
 
                 }
@@ -318,13 +326,15 @@ namespace ServerToolkit.BufferManagement
                     IMemoryBlock blockAfter;
                     if (dictStartLoc.TryGetValue(allocatedBlock.EndLocation + 1, out blockAfter))
                     {
-                        //Yup, delete it
+                        //Yup, remove the free block
                         newFreeSize += blockAfter.Length;
-                        RemoveFreeBlock(blockAfter);
+                        RemoveFreeBlock(blockAfter, true);
                     }
                 }
 
-                //Mark entire contiguous block as free
+                //Mark entire contiguous block as free -- and set Largest if need be:
+                //The length of the AddFreeBlock call will always be longer than or equals to any of the RemoveFreeBlock
+                // calls, so it's SetLargest logic will always work.
                 AddFreeBlock(newFreeStartLocation.Value, newFreeSize, false);
 
             }
@@ -364,7 +374,7 @@ namespace ServerToolkit.BufferManagement
         /// <param name="startLocation">Offset of block in slab</param>
         /// <param name="length">Length of block</param>
         /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
-        /// <remarks>Set suppressSetLargest when the caller wants to set the LargestFreeBlockSize after this method is called</remarks>
+        /// <remarks>Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
         private void AddFreeBlock(long startLocation, long length, bool suppressSetLargest)
         {
             SortedDictionary<long, IMemoryBlock> innerList;
@@ -389,9 +399,23 @@ namespace ServerToolkit.BufferManagement
         /// Marks an unallocated contiguous block as allocated
         /// </summary>
         /// <param name="block">newly allocated block</param>
-        private void RemoveFreeBlock(IMemoryBlock block)
+        private void RemoveFreeBlock(IMemoryBlock block, bool suppressSetLargest)
         {
-            ShrinkFreeMemoryBlock(block, 0);
+            ShrinkOrRemoveFreeMemoryBlock(block, 0, suppressSetLargest);
+        }
+
+        /// <summary>
+        /// Marks an unallocated contiguous block as allocated, and then marks an allocated block as unallocated
+        /// </summary>
+        /// <param name="block">newly allocated block</param>
+        /// <param name="shrinkTo">The length of the smaller free memory block</param>
+        /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
+        /// <remarks>
+        /// Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
+        /// <remarks>
+        private void ShrinkFreeMemoryBlock(IMemoryBlock block, long shrinkTo)
+        {
+            ShrinkOrRemoveFreeMemoryBlock(block, shrinkTo, false);
         }
 
 
@@ -400,8 +424,19 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="block">newly allocated block</param>
         /// <param name="shrinkTo">The length of the smaller free memory block</param>
-        private void ShrinkFreeMemoryBlock(IMemoryBlock block, long shrinkTo)
+        /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
+        /// <remarks>
+        /// Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
+        /// <remarks>
+        /// Do not call this method directly, instead call ShrinkFreeMemoryBlock() or the FreeMemoryBlock()
+        /// </remarks>
+        private void ShrinkOrRemoveFreeMemoryBlock(IMemoryBlock block, long shrinkTo, bool suppressSetLargest)
         {
+            //NOTE: Do not call this method directly, instead call ShrinkFreeMemoryBlock() or RemoveFreeBlock()
+
+            //If shrinking confirm that suppressSetLargest is false
+            System.Diagnostics.Debug.Assert((shrinkTo > 0 && suppressSetLargest == false) || shrinkTo == 0);
+            
             System.Diagnostics.Debug.Assert(shrinkTo <= block.Length);
             System.Diagnostics.Debug.Assert(shrinkTo >= 0 );
 
@@ -412,7 +447,7 @@ namespace ServerToolkit.BufferManagement
             if (freeBlocksList[block.Length].Count == 1)
             {
                 freeBlocksList.Remove(block.Length);
-                if (GetLargest() == block.Length)
+                if (!suppressSetLargest && GetLargest() == block.Length)
                 {
                     //The largest free block was removed, so there will be a new largest
                     calcLargest = true;
