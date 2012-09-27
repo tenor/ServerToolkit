@@ -339,7 +339,7 @@ namespace ServerToolkit.BufferManagement
 
             }
 
-            if (GetLargest() == Size)
+            if (GetLargest() == slabSize)
             {
                 //This slab is empty. prod pool to do some cleanup
                 if (pool != null)
@@ -399,6 +399,8 @@ namespace ServerToolkit.BufferManagement
         /// Marks an unallocated contiguous block as allocated
         /// </summary>
         /// <param name="block">newly allocated block</param>
+        /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
+        /// <remarks>Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
         private void RemoveFreeBlock(IMemoryBlock block, bool suppressSetLargest)
         {
             ShrinkOrRemoveFreeMemoryBlock(block, 0, suppressSetLargest);
@@ -409,10 +411,6 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="block">newly allocated block</param>
         /// <param name="shrinkTo">The length of the smaller free memory block</param>
-        /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
-        /// <remarks>
-        /// Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
-        /// <remarks>
         private void ShrinkFreeMemoryBlock(IMemoryBlock block, long shrinkTo)
         {
             ShrinkOrRemoveFreeMemoryBlock(block, shrinkTo, false);
@@ -460,7 +458,7 @@ namespace ServerToolkit.BufferManagement
 
             if (shrinkTo > 0)
             {
-                AddFreeBlock(block.StartLocation + (block.Length - shrinkTo), shrinkTo, !calcLargest); 
+                AddFreeBlock(block.StartLocation + (block.Length - shrinkTo), shrinkTo, calcLargest); 
             }
 
             if (calcLargest)

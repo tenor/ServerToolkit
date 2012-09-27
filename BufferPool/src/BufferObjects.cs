@@ -96,7 +96,7 @@ namespace ServerToolkit.BufferManagement
         /// <remarks>This property is provided for testing purposes</remarks>
         internal IMemoryBlock[] MemoryBlocks
         {
-            get { return memoryBlocks; }
+            get { return memoryBlocks ?? new IMemoryBlock[]{}; }
         } 
 
 
@@ -397,8 +397,8 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         public const int MinimumSlabSize = 92160; //90 KB to force slab into LOH
 
-        /// The MaximumSlabSize restriction is in place because of ArraySegment's (T[], int, int) constructor.
-        /// If a slab exceeds the MaximumSlabSize, an array segment cannot access data beyond the int.MaxValue location
+        // The MaximumSlabSize restriction is in place because of ArraySegment's (T[], int, int) constructor.
+        // If a slab exceeds the MaximumSlabSize, an array segment cannot access data beyond the int.MaxValue location
 
         /// <summary>
         /// The maximum size of a slab.
@@ -495,6 +495,7 @@ namespace ServerToolkit.BufferManagement
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void SetSingleSlabPool(bool value)
         {
+            //TODO: Is this Interlocked.Exchange here necessary?, singleSlabPool is a 32-bit value:
             Interlocked.Exchange(ref singleSlabPool, value == true ? -1 : 0);
         }
 
