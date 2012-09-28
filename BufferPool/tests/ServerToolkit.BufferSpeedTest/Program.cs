@@ -32,8 +32,6 @@ namespace ServerToolkit.BufferPoolSpeedTest
 
             for (int p = 0; p < loops; p++)
             {
-                Stopwatch timer = new Stopwatch();
-
                 startEvent = new ManualResetEvent(false);
                 doneEvents = new ManualResetEvent[NoOfThreads];
 
@@ -52,6 +50,7 @@ namespace ServerToolkit.BufferPoolSpeedTest
 
                 Thread.Sleep(500); //Wait for all threads to be ready
 
+                Stopwatch timer = new Stopwatch();
                 timer.Start(); //start timer
 
                 startEvent.Set(); //Signal start 
