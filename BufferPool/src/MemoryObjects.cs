@@ -112,9 +112,9 @@ namespace ServerToolkit.BufferManagement
         private readonly long slabSize;
         private readonly BufferPool pool;
 
-        private Dictionary<long, IMemoryBlock> dictStartLoc = new Dictionary<long, IMemoryBlock>();
-        private Dictionary<long, IMemoryBlock> dictEndLoc = new Dictionary<long, IMemoryBlock>();
-        private SortedDictionary<long, SortedDictionary<long, IMemoryBlock>> freeBlocksList = new SortedDictionary<long, SortedDictionary<long, IMemoryBlock>>();
+        private Dictionary<long, FreeSpace> dictStartLoc = new Dictionary<long, FreeSpace>();
+        private Dictionary<long, long> dictEndLoc = new Dictionary<long /* endlocation */, long /* start location*/>();
+        private SortedDictionary<long, List<long>> freeBlocksList = new SortedDictionary<long /* free block length */, List<long> /* list of start locations*/>();
         private object sync = new object();
 
         private long largest;
@@ -148,7 +148,7 @@ namespace ServerToolkit.BufferManagement
             // lock is unnecessary in this instance constructor
             //lock (sync)
             //{
-                IMemoryBlock first;
+                FreeSpace first;
                 if (!dictStartLoc.TryGetValue(0, out first))
                 {
                     AddFreeBlock(0, size, false);
@@ -247,16 +247,8 @@ namespace ServerToolkit.BufferManagement
 
 
                 //Grab the first memoryblock in the freeBlockList innerSortedDictionary
-                //There is guanranteed to be an innerSortedDictionary with at least 1 key=value pair
-                //TODO: Simplify this
-                IMemoryBlock foundBlock = null;
-                foreach (KeyValuePair<long, IMemoryBlock> pair in freeBlocksList[keys[index]])
-                {
-                    foundBlock = pair.Value;
-                    break;
-                }
-
-
+                //There is guanranteed to be at least one in the innerList
+                FreeSpace foundBlock = dictStartLoc[freeBlocksList[keys[index]][0]];
 
                 if (foundBlock.Length == length)
                 {
@@ -265,7 +257,7 @@ namespace ServerToolkit.BufferManagement
                     //Remove existing free block -- and set Largest if need be
                     RemoveFreeBlock(foundBlock, false);
 
-                    allocatedBlock = foundBlock;
+                    allocatedBlock = new MemoryBlock(foundBlock.Offset, foundBlock.Length, this);
                 }
                 else
                 {
@@ -274,7 +266,7 @@ namespace ServerToolkit.BufferManagement
                     //Shrink the existing free memory block by the new allocation
                     ShrinkFreeMemoryBlock(foundBlock, foundBlock.Length - length);
 
-                    allocatedBlock = new MemoryBlock(foundBlock.StartLocation, length, this);
+                    allocatedBlock = new MemoryBlock(foundBlock.Offset, length, this);
 
 
                 }
@@ -305,13 +297,13 @@ namespace ServerToolkit.BufferManagement
 
                     //Check if block before this one is free
 
-                    IMemoryBlock blockBefore;
-                    if (dictEndLoc.TryGetValue(allocatedBlock.StartLocation - 1, out blockBefore))
+                    long startLocBefore;
+                    if (dictEndLoc.TryGetValue(allocatedBlock.StartLocation - 1, out startLocBefore))
                     {
                         //Yup, so remove the free block
-                        newFreeStartLocation = blockBefore.StartLocation;
-                        newFreeSize += blockBefore.Length;
-                        RemoveFreeBlock(blockBefore, true);
+                        newFreeStartLocation = startLocBefore;
+                        newFreeSize += (allocatedBlock.StartLocation - startLocBefore);
+                        RemoveFreeBlock(dictStartLoc[startLocBefore], true);
                     }
 
                 }
@@ -323,7 +315,7 @@ namespace ServerToolkit.BufferManagement
                 if (allocatedBlock.EndLocation + 1 < Size)
                 {
                     // Check if block next to (below) this one is free
-                    IMemoryBlock blockAfter;
+                    FreeSpace blockAfter;
                     if (dictStartLoc.TryGetValue(allocatedBlock.EndLocation + 1, out blockAfter))
                     {
                         //Yup, remove the free block
@@ -371,23 +363,30 @@ namespace ServerToolkit.BufferManagement
         /// <summary>
         /// Marks an allocated block as unallocated
         /// </summary>
-        /// <param name="startLocation">Offset of block in slab</param>
+        /// <param name="offset">Offset of block in slab</param>
         /// <param name="length">Length of block</param>
         /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
         /// <remarks>Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
-        private void AddFreeBlock(long startLocation, long length, bool suppressSetLargest)
+        private void AddFreeBlock(long offset, long length, bool suppressSetLargest)
         {
-            SortedDictionary<long, IMemoryBlock> innerList;
+            dictStartLoc.Add(offset, new FreeSpace(offset, length));
+            dictEndLoc.Add(offset + length - 1, offset);
+
+            List<long> innerList;
             if (!freeBlocksList.TryGetValue(length, out innerList))
             {
-                innerList = new SortedDictionary<long, IMemoryBlock>();
+                innerList = new List<long>();
+                innerList.Add(offset);
                 freeBlocksList.Add(length, innerList);
             }
+            else
+            {
+                int index = innerList.BinarySearch(offset);
+                System.Diagnostics.Debug.Assert(index < 0); //This should always be negative as there should be no other freeblock with that offset
+                index = ~index;
+                innerList.Insert(index, offset);
+            }
 
-            MemoryBlock newFreeBlock = new MemoryBlock(startLocation, length, this);
-            innerList.Add(startLocation, newFreeBlock);
-            dictStartLoc.Add(startLocation, newFreeBlock);
-            dictEndLoc.Add(startLocation + length - 1, newFreeBlock);
             if (!suppressSetLargest && GetLargest() < length)
             {
                 SetLargest(length);
@@ -401,7 +400,7 @@ namespace ServerToolkit.BufferManagement
         /// <param name="block">newly allocated block</param>
         /// <param name="suppressSetLargest">True to not have this method update LargestFreeBlockSize</param>
         /// <remarks>Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
-        private void RemoveFreeBlock(IMemoryBlock block, bool suppressSetLargest)
+        private void RemoveFreeBlock(FreeSpace block, bool suppressSetLargest)
         {
             ShrinkOrRemoveFreeMemoryBlock(block, 0, suppressSetLargest);
         }
@@ -411,7 +410,7 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         /// <param name="block">newly allocated block</param>
         /// <param name="shrinkTo">The length of the smaller free memory block</param>
-        private void ShrinkFreeMemoryBlock(IMemoryBlock block, long shrinkTo)
+        private void ShrinkFreeMemoryBlock(FreeSpace block, long shrinkTo)
         {
             ShrinkOrRemoveFreeMemoryBlock(block, shrinkTo, false);
         }
@@ -428,7 +427,7 @@ namespace ServerToolkit.BufferManagement
         /// <remarks>
         /// Do not call this method directly, instead call ShrinkFreeMemoryBlock() or the FreeMemoryBlock()
         /// </remarks>
-        private void ShrinkOrRemoveFreeMemoryBlock(IMemoryBlock block, long shrinkTo, bool suppressSetLargest)
+        private void ShrinkOrRemoveFreeMemoryBlock(FreeSpace block, long shrinkTo, bool suppressSetLargest)
         {
             //NOTE: Do not call this method directly, instead call ShrinkFreeMemoryBlock() or RemoveFreeBlock()
 
@@ -438,11 +437,12 @@ namespace ServerToolkit.BufferManagement
             System.Diagnostics.Debug.Assert(shrinkTo <= block.Length);
             System.Diagnostics.Debug.Assert(shrinkTo >= 0 );
 
-            dictStartLoc.Remove(block.StartLocation);
-            dictEndLoc.Remove(block.EndLocation);
+            dictStartLoc.Remove(block.Offset);
+            dictEndLoc.Remove(block.End);
 
             bool calcLargest = false;
-            if (freeBlocksList[block.Length].Count == 1)
+            List<long> innerList = freeBlocksList[block.Length];
+            if (innerList.Count == 1)
             {
                 freeBlocksList.Remove(block.Length);
                 if (!suppressSetLargest && GetLargest() == block.Length)
@@ -453,12 +453,15 @@ namespace ServerToolkit.BufferManagement
             }
             else
             {
-                freeBlocksList[block.Length].Remove(block.StartLocation);
+                //Find location of this block in the innerlist and remove it
+                int index = innerList.BinarySearch(block.Offset);
+                System.Diagnostics.Debug.Assert(index >= 0);
+                innerList.RemoveAt(index);
             }
 
             if (shrinkTo > 0)
             {
-                AddFreeBlock(block.StartLocation + (block.Length - shrinkTo), shrinkTo, calcLargest); 
+                AddFreeBlock(block.Offset + (block.Length - shrinkTo), shrinkTo, calcLargest); 
             }
 
             if (calcLargest)
@@ -495,6 +498,33 @@ namespace ServerToolkit.BufferManagement
             {
                 return Interlocked.Read(ref largest);
             }
+        }
+
+        /// <summary>
+        /// Represents an unallocated memory block within the slab
+        /// </summary>
+        private struct FreeSpace
+        {
+            public FreeSpace(long offset, long length)
+            {
+                Offset = offset;
+                Length = length;
+            }
+
+            /// <summary>
+            /// The offset within the slab array where the free block begins
+            /// </summary>
+            public long Offset;
+
+            /// <summary>
+            /// The length of the free block
+            /// </summary>
+            public long Length;
+
+            /// <summary>
+            /// The end location of the free block
+            /// </summary>
+            public long End { get { return Offset + Length - 1; } }
         }
     }
 }
