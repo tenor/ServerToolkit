@@ -161,7 +161,7 @@ namespace ServerToolkit.BufferManagement
                 //Get first segment
                 long totalLength = 0;
                 {
-                    var startBlock = memoryBlocks[startBlockIndex];
+                    IMemoryBlock startBlock = memoryBlocks[startBlockIndex];
                     if (startBlock.Length >= (startBlockOffSet + length))
                     {
                         //Block can hold entire desired length
@@ -772,7 +772,7 @@ namespace ServerToolkit.BufferManagement
         /// <returns>An optionally filled IBuffer object</returns>
         private static IBuffer GetFilledBuffer(IList<IMemoryBlock> allocatedBlocks, byte[] filledWith)
         {
-            var newBuffer = new ManagedBuffer(allocatedBlocks);
+            IBuffer newBuffer = new ManagedBuffer(allocatedBlocks);
             if (filledWith != null) newBuffer.FillWith(filledWith);
             return newBuffer;
         }
