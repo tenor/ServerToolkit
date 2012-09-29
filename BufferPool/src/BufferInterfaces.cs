@@ -113,7 +113,7 @@ namespace ServerToolkit.BufferManagement
     /// <summary>
     /// Represents a pool of IBuffer objects 
     /// </summary>
-    public interface IBufferPool
+    internal interface IBufferPool
     {
         /// <summary>
         /// Gets the initial number of slabs created

@@ -30,7 +30,7 @@ namespace ServerToolkit.BufferManagement
     {
         private bool disposed = false;
 
-        IMemoryBlock[] memoryBlocks;
+        IList<IMemoryBlock> memoryBlocks;
         byte[] slabArray;
         readonly long size;
 
@@ -38,13 +38,13 @@ namespace ServerToolkit.BufferManagement
         /// Initializes a new instance of the ManagedBuffer class, specifying the memory block that the ManagedBuffer reads and writes to.
         /// </summary>
         /// <param name="allocatedMemoryBlocks">Underlying allocated memory block</param>
-        internal ManagedBuffer(IMemoryBlock[] allocatedMemoryBlocks)
+        internal ManagedBuffer(IList<IMemoryBlock> allocatedMemoryBlocks)
         {
             if (allocatedMemoryBlocks == null) throw new ArgumentNullException("allocatedMemoryBlocks");
-            if (allocatedMemoryBlocks.Length == 0) throw new ArgumentException("allocatedMemoryBlocks cannot be empty"); 
+            if (allocatedMemoryBlocks.Count == 0) throw new ArgumentException("allocatedMemoryBlocks cannot be empty"); 
             memoryBlocks = allocatedMemoryBlocks;
             size = 0;
-            for (int i = 0; i < allocatedMemoryBlocks.Length; i++)
+            for (int i = 0; i < allocatedMemoryBlocks.Count; i++)
             {
                 size += allocatedMemoryBlocks[i].Length;
             }
@@ -87,16 +87,16 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         public int SegmentCount
         {
-            get { return memoryBlocks == null ? 1 : memoryBlocks.Length; }
+            get { return memoryBlocks == null ? 1 : memoryBlocks.Count; }
         }
 
         /// <summary>
         /// Gets the underlying memory block(s)
         /// </summary>
         /// <remarks>This property is provided for testing purposes</remarks>
-        internal IMemoryBlock[] MemoryBlocks
+        internal IList<IMemoryBlock> MemoryBlocks
         {
-            get { return memoryBlocks ?? new IMemoryBlock[]{}; }
+            get { return memoryBlocks ?? new List<IMemoryBlock>(); }
         } 
 
 
@@ -178,7 +178,7 @@ namespace ServerToolkit.BufferManagement
 
                 //Get next set of segments
                 IMemoryBlock block;
-                for (int i = startBlockIndex + 1; i < memoryBlocks.Length; i++)
+                for (int i = startBlockIndex + 1; i < memoryBlocks.Count; i++)
                 {
                     block = memoryBlocks[i];
                     if (block.Length >= (length - totalLength))
@@ -233,7 +233,7 @@ namespace ServerToolkit.BufferManagement
 
             long bytesCopied = 0;
             IMemoryBlock block;
-            for (int i = 0; i < memoryBlocks.Length; i++)
+            for (int i = 0; i < memoryBlocks.Count; i++)
             {
                 block = memoryBlocks[i];
                 if (block.Length >= (length - bytesCopied))
@@ -309,7 +309,7 @@ namespace ServerToolkit.BufferManagement
 
             long bytesCopied = 0;
             IMemoryBlock block;
-            for (int i = 0; i < memoryBlocks.Length; i++)
+            for (int i = 0; i < memoryBlocks.Count; i++)
             {
                 block = memoryBlocks[i];
                 if (block.Length >= (length - bytesCopied))
@@ -353,7 +353,7 @@ namespace ServerToolkit.BufferManagement
 
                     if (memoryBlocks != null)
                     {
-                        for (int i = 0; i < memoryBlocks.Length; i++)
+                        for (int i = 0; i < memoryBlocks.Count; i++)
                         {
                             try
                             {
@@ -383,7 +383,7 @@ namespace ServerToolkit.BufferManagement
             long totalScannedLength = 0;
             blockIndex = 0;
             blockOffSet = 0;
-            for (int i = 0; i < memoryBlocks.Length; i++)
+            for (int i = 0; i < memoryBlocks.Count; i++)
             {
                 if (offset < totalScannedLength + memoryBlocks[i].Length)
                 {
@@ -560,7 +560,7 @@ namespace ServerToolkit.BufferManagement
             try
             {
                 IMemorySlab[] slabArr;
-                long currentlyAllocdLength = 0;
+                long allocdLengthTally = 0;
 
                 if (GetSingleSlabPool())
                 {
@@ -571,44 +571,29 @@ namespace ServerToolkit.BufferManagement
                     //The optimization is effective because singleSlabPool will be accurate majority of the time.
 
                     slabArr = new IMemorySlab[] { firstSlab };
-                    List<IMemoryBlock> allocd;
-                    currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
-                    if (currentlyAllocdLength > 0)
-                    {
-                        allocatedBlocks.AddRange(allocd);
-                    }
+                    allocdLengthTally = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, ref allocatedBlocks);
 
-                    if (currentlyAllocdLength == size)
+                    if (allocdLengthTally == size)
                     {
                         //We got the entire length we are looking for, so leave
-                        var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                        if (filledWith != null) buffer.FillWith(filledWith);
-                        return buffer;
+                        return GetFilledBuffer(allocatedBlocks, filledWith);
                     }
 
                     SetSingleSlabPool(false); // Slab count will soon be incremented
                 }
                 else
                 {
-
                     lock (syncSlabList)
                     {
                         slabArr = slabs.ToArray();
                     }
 
-                    List<IMemoryBlock> allocd;
-                    currentlyAllocdLength = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, out allocd);
-                    if (currentlyAllocdLength > 0)
-                    {
-                        allocatedBlocks.AddRange(allocd);
-                    }
+                    allocdLengthTally = TryAllocateBlocksInSlabs(size, MAX_SEGMENTS_PER_BUFFER, slabArr, ref allocatedBlocks);
 
-                    if (currentlyAllocdLength == size)
+                    if (allocdLengthTally == size)
                     {
                         //We got the entire length we are looking for, so leave
-                        var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                        if (filledWith != null) buffer.FillWith(filledWith);
-                        return buffer;
+                        return GetFilledBuffer(allocatedBlocks, filledWith);
                     }
                 }
 
@@ -622,20 +607,12 @@ namespace ServerToolkit.BufferManagement
                         slabArr = slabs.ToArray();
                     }
 
-                    List<IMemoryBlock> allocd;
-                    long allocdLength = TryAllocateBlocksInSlabs(size - currentlyAllocdLength, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, out allocd);
-                    if (allocdLength > 0)
-                    {
-                        allocatedBlocks.AddRange(allocd);
-                        currentlyAllocdLength += allocdLength;
-                    }
+                    allocdLengthTally += TryAllocateBlocksInSlabs(size - allocdLengthTally, MAX_SEGMENTS_PER_BUFFER - allocatedBlocks.Count, slabArr, ref allocatedBlocks);
 
-                    if (currentlyAllocdLength == size)
+                    if (allocdLengthTally == size)
                     {
                         //found it -- leave
-                        var buffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                        if (filledWith != null) buffer.FillWith(filledWith);
-                        return buffer;
+                        return GetFilledBuffer(allocatedBlocks, filledWith);
                     }
 
                     List<IMemorySlab> newSlabList = new List<IMemorySlab>();
@@ -645,10 +622,10 @@ namespace ServerToolkit.BufferManagement
                         MemorySlab newSlab = new MemorySlab(slabSize, this);
 
                         IMemoryBlock allocdBlk;
-                        if (slabSize > size - currentlyAllocdLength)
+                        if (slabSize > size - allocdLengthTally)
                         {
                             //Allocate remnant
-                            newSlab.TryAllocate(size - currentlyAllocdLength, out allocdBlk);
+                            newSlab.TryAllocate(size - allocdLengthTally, out allocdBlk);
                         }
                         else
                         {
@@ -658,9 +635,9 @@ namespace ServerToolkit.BufferManagement
 
                         newSlabList.Add(newSlab);
                         allocatedBlocks.Add(allocdBlk);
-                        currentlyAllocdLength += allocdBlk.Length;
+                        allocdLengthTally += allocdBlk.Length;
                     }
-                    while (currentlyAllocdLength < size);
+                    while (allocdLengthTally < size);
 
                     lock (syncSlabList)
                     {
@@ -676,10 +653,7 @@ namespace ServerToolkit.BufferManagement
 
                 }
 
-                //TODO: Create a helper method that creates a buffer and fills it, if filledWith is not null
-                var newBuffer = new ManagedBuffer(allocatedBlocks.ToArray());
-                if (filledWith != null) newBuffer.FillWith(filledWith);
-                return newBuffer;
+                return GetFilledBuffer(allocatedBlocks, filledWith);
             }
             catch
             {
@@ -742,11 +716,10 @@ namespace ServerToolkit.BufferManagement
         /// <param name="totalLength">Requested total length of all memory blocks</param>
         /// <param name="maxBlocks">Maximum number of memory blocks to allocate</param>
         /// <param name="slabs">Array of slabs to search</param>
-        /// <param name="allocatedBlocks">Allocated memory block</param>
+        /// <param name="allocatedBlocks">List of allocated memory block</param>
         /// <returns>True if memory block was successfully allocated. False, if otherwise</returns>
-        private static long TryAllocateBlocksInSlabs(long totalLength, int maxBlocks, IMemorySlab[] slabs, out List<IMemoryBlock> allocatedBlocks)
+        private static long TryAllocateBlocksInSlabs(long totalLength, int maxBlocks, IMemorySlab[] slabs, ref List<IMemoryBlock> allocatedBlocks)
         {
-            //TODO: Make allocatedBlocks a ref parameter.
             allocatedBlocks = new List<IMemoryBlock>();
 
             long minBlockSize;
@@ -755,6 +728,7 @@ namespace ServerToolkit.BufferManagement
             long largest;
             long reqLength;
             IMemoryBlock allocdBlock;
+            int allocdCount = 0;
             //TODO: Figure out how to do this math without involving floating point arithmetic
             minBlockSize = (long)Math.Ceiling(totalLength / (float)maxBlocks);
             do
@@ -772,12 +746,12 @@ namespace ServerToolkit.BufferManagement
                         {
                             allocatedBlocks.Add(allocdBlock);
                             allocatedSizeTally += reqLength;
-
+                            allocdCount++;
                             if (allocatedSizeTally == totalLength) return allocatedSizeTally;
 
                             //Calculate the new minimum block size
                             //TODO: Figure out how to do this math without involving floating point arithmetic
-                            minBlockSize = (long)Math.Ceiling((totalLength - allocatedSizeTally) / (float)(maxBlocks - allocatedBlocks.Count));
+                            minBlockSize = (long)Math.Ceiling((totalLength - allocatedSizeTally) / (float)(maxBlocks - allocdCount));
 
                             //Scan again from start because there is a chance the smaller minimum block size exists in previously skipped slabs
                             break;
@@ -790,5 +764,17 @@ namespace ServerToolkit.BufferManagement
             return allocatedSizeTally;
         }
 
+        /// <summary>
+        /// Helper method that gets a filled buffer constructed from a list of memory blocks
+        /// </summary>
+        /// <param name="allocatedBlocks">The memoryblocks that comprise the buffer</param>
+        /// <param name="filledWith">If not null, the contents the memory block will be filled with</param>
+        /// <returns>An optionally filled IBuffer object</returns>
+        private static IBuffer GetFilledBuffer(IList<IMemoryBlock> allocatedBlocks, byte[] filledWith)
+        {
+            var newBuffer = new ManagedBuffer(allocatedBlocks);
+            if (filledWith != null) newBuffer.FillWith(filledWith);
+            return newBuffer;
+        }
     }
 }

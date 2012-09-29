@@ -97,7 +97,7 @@ namespace ServerToolkit.BufferManagement.Tests
                 blockList.Add(allocatedMemoryBlock);
             }
 
-            ManagedBuffer target = new ManagedBuffer(blockList.ToArray());
+            ManagedBuffer target = new ManagedBuffer(blockList);
             return target;
         }        
 
