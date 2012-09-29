@@ -30,8 +30,8 @@ namespace ServerToolkit.BufferManagement
     {
         private bool disposed = false;
 
-        readonly IMemoryBlock[] memoryBlocks;
-        readonly byte[] slabArray;
+        IMemoryBlock[] memoryBlocks;
+        byte[] slabArray;
         readonly long size;
 
         /// <summary>
@@ -213,6 +213,10 @@ namespace ServerToolkit.BufferManagement
             CopyTo(destinationArray, 0, this.Size);
         }
 
+
+        //TODO: Write a version of CopyTo with a sourceIndex: CopyTo(long index, byte[] array, long arrayIndex, long length)
+        //TODO: Rename the parameters of CopyTo (see List.CopyTo as a guideline)
+
         /// <summary>
         /// Copies data from the buffer to a byte array
         /// </summary>
@@ -283,6 +287,9 @@ namespace ServerToolkit.BufferManagement
 
             FillWith(sourceArray, 0, sourceArray.Length);
         }
+
+        //TODO: Write a version of FIllWith with a destinationIndex: FillWith(long index, byte[] array, long arrayIndex, long length)
+        //TODO: Rename the parameters of FillWith (see List.CopyTo as a guideline)
 
         /// <summary>
         /// Copies data from a byte array into the buffer.
@@ -360,7 +367,12 @@ namespace ServerToolkit.BufferManagement
                                 #endif
                             }
                         }
+
+                        //Remove all references to memory blocks and their underlying slabs/arrays
+                        memoryBlocks = null;
                     }
+
+                    if (slabArray != null) slabArray = null;
                 }
             }
         }
@@ -450,6 +462,8 @@ namespace ServerToolkit.BufferManagement
             //}
         }
 
+        //TODO: Look for a better name for this property
+
         /// <summary>
         /// Gets the initial number of slabs created
         /// </summary>
@@ -457,6 +471,8 @@ namespace ServerToolkit.BufferManagement
         {
             get { return initialSlabs; }
         }
+
+        //TODO: Look for a better name for this property. SlabIncrements is probably a good one.
 
         /// <summary>
         /// Gets the additional number of slabs to be created at a time
@@ -690,7 +706,8 @@ namespace ServerToolkit.BufferManagement
         /// </summary>
         internal void TryFreeSlabs()
         {
-            //TODO: Shouldn't the lock used for adding slabs to the list be held somewhere in here?
+            //NOTE: This method can free a slab just before it gets allocated but that's alright because eventually
+            //buffers in the 'stray' slab will be disposed and all references to the slab will no longer exist
 
             lock (syncSlabList)
             {

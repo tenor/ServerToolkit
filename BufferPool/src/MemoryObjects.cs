@@ -267,8 +267,6 @@ namespace ServerToolkit.BufferManagement
                     ShrinkFreeMemoryBlock(foundBlock, foundBlock.Length - length);
 
                     allocatedBlock = new MemoryBlock(foundBlock.Offset, length, this);
-
-
                 }
 
                 return length;
