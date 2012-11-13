@@ -103,9 +103,9 @@ private void ReadCallback(IAsyncResult ar)
     try 
     { 
         bytesRead = socket.EndReceive(ar); 
-        byte[] data = new byte[bytesRead &gt; 0 ? bytesRead : 0];
+        byte[] data = new byte[bytesRead > 0 ? bytesRead : 0];
 
-        if (bytesRead &gt; 0) 
+        if (bytesRead > 0) 
         { 
             recvBuffer.CopyTo(data, 0, bytesRead);
 
