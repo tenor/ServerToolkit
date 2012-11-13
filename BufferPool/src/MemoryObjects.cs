@@ -28,7 +28,7 @@ namespace ServerToolkit.BufferManagement
     /// </summary>
     internal sealed class MemoryBlock : IMemoryBlock
     {
-        readonly long startLoc, endLoc, length;
+        readonly long startLoc, length;
         readonly IMemorySlab owner;
 
         /// <summary>
@@ -51,12 +51,11 @@ namespace ServerToolkit.BufferManagement
                 throw new ArgumentOutOfRangeException("length", "Length must be greater than 0");
             }
 
-            endLoc = startLocation + length - 1;
             this.length = length;
             if (slab == null) throw new ArgumentNullException("slab");
             this.owner = slab;
 
-            //TODO: When this class is converted to a struct, consider implementing IComparer, IComparable -- first figure out what sorted dictionary uses those Comparer things for
+            //TODO: If this class is converted to a struct, consider implementing IComparer, IComparable -- first figure out what sorted dictionary uses those Comparer things for
         }
 
         /// <summary>
@@ -70,8 +69,6 @@ namespace ServerToolkit.BufferManagement
             }
         }
 
-        //TODO: EndLocation should be calculated. It's not referenced as often as start location and length
-
         /// <summary>
         /// Gets the offset in the slab where the memory block ends.
         /// </summary>
@@ -80,7 +77,7 @@ namespace ServerToolkit.BufferManagement
         {
             get
             {
-                return endLoc;
+                return startLoc + length - 1;
             }
         }
 

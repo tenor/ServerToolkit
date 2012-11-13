@@ -101,7 +101,7 @@ namespace ServerToolkit.BufferManagement
 
 
         //NOTE: This overload cannot return segments larger than int.MaxValue;
-        //TODO: MULTI_ARRAY_SEGMENTS: NOTE: This method should be able to accept length > int.MaxValue after implementing multi-array-segments
+        //TODO: Write test: MULTI_ARRAY_SEGMENTS: NOTE: This method should be able to accept length > int.MaxValue after implementing multi-array-segments
 
         /// <summary>
         /// Gets buffer segments that can be passed on to an asynchronous socket operation.
@@ -462,7 +462,7 @@ namespace ServerToolkit.BufferManagement
             //}
         }
 
-        //TODO: Look for a better name for this property
+        //TODO: Look for a better name for this property, consider SlabMinimumCount
 
         /// <summary>
         /// Gets the initial number of slabs created
@@ -473,6 +473,7 @@ namespace ServerToolkit.BufferManagement
         }
 
         //TODO: Look for a better name for this property. SlabIncrements is probably a good one.
+        //TODO: Also change behavior so that if the slabIncrements have already been met then do not add new slabs.
 
         /// <summary>
         /// Gets the additional number of slabs to be created at a time
@@ -496,6 +497,7 @@ namespace ServerToolkit.BufferManagement
         /// <remarks>This property is provided for testing purposes</remarks>
         internal long SlabCount
         {
+            //NOTE: Some synchronization might be necessary if this method becomes public
             get { return slabs.Count; }
         }
 
@@ -536,7 +538,8 @@ namespace ServerToolkit.BufferManagement
         {
             if (size < 0) throw new ArgumentException("size must be greater than 0");
 
-            //TODO: If size is larger than 16 * SlabSize (or 16 * MaxNumberOfSegments) then throw exception saying you can't have a buffer greater than 16 times Slab size
+            //TODO: If size is larger than 16 * SlabSize (or MaxNumberOfSegments * SlabSize) then throw exception saying you can't have a buffer greater than 16 times Slab size
+            //Write test for this
 
             //Make sure filledWith can fit into the requested buffer, so that we do not allocate a buffer and then
             //an exception is thrown (when IBuffer.FillWith() is called) before the buffer is returned.
@@ -557,6 +560,7 @@ namespace ServerToolkit.BufferManagement
             List<IMemoryBlock> allocatedBlocks = new List<IMemoryBlock>();
 
             //TODO: Consider the performance penalty involved in making the try-catch below a constrained region
+            //RuntimeHelpers.PrepareConstrainedRegions();
             try
             {
                 IMemorySlab[] slabArr;
@@ -657,7 +661,7 @@ namespace ServerToolkit.BufferManagement
             }
             catch
             {
-                //OOMs, Thread abort exceptions and other ugly things can happen so roll back any allocated blocks.
+                //OOM, Thread abort exceptions and other ugly things can happen so roll back any allocated blocks.
                 //This will prevent a limbo situation where those blocks are allocated but caller is unaware and can't deallocate them.
 
                 //NOTE: This try-catch block should not be within a lock as it calls MemorySlab.Free which takes locks,
