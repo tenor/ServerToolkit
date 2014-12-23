@@ -283,6 +283,20 @@ namespace ServerToolkit.BufferManagement
 
             lock (sync)
             {
+                //Zero-fill block
+                if (allocatedBlock.StartLocation <= int.MaxValue && allocatedBlock.Length <= int.MaxValue)
+                {
+                    //Use Array.Clear if startLocation and length fall within int32 range
+                    System.Array.Clear(allocatedBlock.Slab.Array, (int)allocatedBlock.StartLocation, (int)allocatedBlock.Length);
+                }
+                else
+                {
+                    for (long i = allocatedBlock.StartLocation; i < allocatedBlock.StartLocation + allocatedBlock.Length; i++)
+                    {
+                        array[i] = 0;
+                    }
+                }
+
                 //Attempt to coalesce/merge free blocks around the allocateblock to be freed.
                 long? newFreeStartLocation = null;
                 long newFreeSize = 0;
@@ -364,23 +378,6 @@ namespace ServerToolkit.BufferManagement
         /// <remarks>Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
         private void AddFreeBlock(long offset, long length, bool suppressSetLargest)
         {
-            if (array != null)
-            {
-                //Zero-fill block
-                if (offset <= int.MaxValue && length <= int.MaxValue)
-                {
-                    //Use Array.Clear if offset and length fall within int32 range
-                    System.Array.Clear(array, (int)offset, (int)length);
-                }
-                else
-                {
-                    for (long i = offset; i < offset + length; i++)
-                    {
-                        array[i] = 0;
-                    }
-                }
-            }
-
             dictStartLoc.Add(offset, new FreeSpace(offset, length));
             dictEndLoc.Add(offset + length - 1, offset);
 
