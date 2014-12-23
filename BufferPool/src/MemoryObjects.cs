@@ -364,6 +364,23 @@ namespace ServerToolkit.BufferManagement
         /// <remarks>Set suppressSetLargest when the caller will the LargestFreeBlockSize after this method is called</remarks>
         private void AddFreeBlock(long offset, long length, bool suppressSetLargest)
         {
+            if (array != null)
+            {
+                //Zero-fill block
+                if (offset <= int.MaxValue && length <= int.MaxValue)
+                {
+                    //Use Array.Clear if offset and length fall within int32 range
+                    System.Array.Clear(array, (int)offset, (int)length);
+                }
+                else
+                {
+                    for (long i = offset; i < offset + length; i++)
+                    {
+                        array[i] = 0;
+                    }
+                }
+            }
+
             dictStartLoc.Add(offset, new FreeSpace(offset, length));
             dictEndLoc.Add(offset + length - 1, offset);
 

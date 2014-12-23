@@ -145,6 +145,35 @@ namespace ServerToolkit.BufferManagement.Tests
         }
 
         /// <summary>
+        ///Tests that new buffers are clear (i.e. zero-filled)
+        ///</summary>
+        [TestMethod()]
+        [Description("Tests that new buffers are zero-filled")]
+        public void NewBufferIsFreshTest()
+        {
+            MemorySlab slab = new MemorySlab(blockSize * 3, null);
+
+            //Save some random junk into a buffer and dispose it.
+            {
+                ManagedBuffer target1 = GetNewBuffer(slab);
+                byte[] SourceArray = GetRandomizedByteArray(blockSize);
+                target1.FillWith(SourceArray);
+                target1.Dispose();
+
+            }
+
+            //Get a fresh buffer and confirm that it's zero-filled.
+            {
+                ManagedBuffer target2 = GetNewBuffer(slab);
+                byte[] DestArray = new byte[blockSize];
+                target2.CopyTo(DestArray);
+                Assert.IsTrue(ArraysMatch(DestArray, new byte[blockSize]));
+                target2.Dispose();
+            }
+        }
+
+
+        /// <summary>
         ///A test for FillWith
         ///</summary>
         [TestMethod()]
